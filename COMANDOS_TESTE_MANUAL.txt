@@ -1,0 +1,64 @@
+# ===============================================
+# COMANDOS PARA TESTAR MANUALMENTE
+# ===============================================
+# Copie e cole estes comandos um por vez no terminal
+
+# COMANDO 1: Testar Python
+python --version
+
+# COMANDO 2: Testar Node.js  
+node --version
+
+# COMANDO 3: Testar NPM
+npm --version
+
+# COMANDO 4: Testar Git
+git --version
+
+# COMANDO 5: Testar PostgreSQL
+psql --version
+
+# COMANDO 6: Testar Poetry
+poetry --version
+
+# COMANDO 7: Testar Chocolatey
+choco --version
+
+# ===============================================
+# INTERPRETAÇÃO DOS RESULTADOS:
+# ===============================================
+
+# SE MOSTRAR VERSÃO = FERRAMENTA FUNCIONANDO ✅
+# Exemplo: "Python 3.12.0" = OK
+
+# SE DER ERRO = FERRAMENTA NÃO INSTALADA ❌
+# Exemplo: "'python' is not recognized" = Não instalada
+
+# ===============================================
+# SE ALGUMA FERRAMENTA DER ERRO:
+# ===============================================
+
+# Execute como ADMINISTRADOR:
+# choco install python nodejs git postgresql poetry -y
+
+# ===============================================
+# TESTE RÁPIDO DE ESTRUTURA:
+# ===============================================
+
+# Verificar se projeto existe:
+Test-Path "paineluniversal\backend\pyproject.toml"
+Test-Path "paineluniversal\frontend\package.json"
+
+# ===============================================
+# RESULTADO ESPERADO:
+# ===============================================
+
+# ✅ python --version    → Python 3.12.x
+# ✅ node --version      → v20.x.x  
+# ✅ npm --version       → 10.x.x
+# ✅ git --version       → git version 2.x.x
+# ✅ psql --version      → psql (PostgreSQL) 15.x
+# ✅ poetry --version    → Poetry version 1.x.x
+# ✅ choco --version     → Chocolatey v2.x.x
+
+# ===============================================
