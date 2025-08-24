@@ -1,0 +1,437 @@
+version: '3.8'
+
+# ================================
+# ULTRA-PERFORMANCE PRODUCTION STACK
+# Sistema Universal de Eventos - Enterprise Grade
+# ================================
+
+services:
+  # ================================
+  # REVERSE PROXY & LOAD BALANCER
+  # ================================
+  traefik:
+    image: traefik:v3.0
+    container_name: sistema-universal-traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik:/etc/traefik
+      - ./ssl:/ssl
+    environment:
+      - TRAEFIK_API_DASHBOARD=true
+      - TRAEFIK_API_INSECURE=false
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.dashboard.tls=true"
+    networks:
+      - sistema-network
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ================================
+  # BACKEND API - ULTRA PERFORMANCE
+  # ================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+      target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VERSION: ${VERSION:-3.0.0-ultra}
+        VCS_REF: ${VCS_REF:-}
+    container_name: sistema-universal-backend
+    restart: unless-stopped
+    environment:
+      # Application Configuration
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - API_PREFIX=/api/v1
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_ORIGINS=["https://app.localhost","https://sistema.yourdomain.com"]
+      
+      # Database Configuration
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_POOL_SIZE=20
+      - DATABASE_MAX_OVERFLOW=40
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      
+      # Performance Configuration
+      - WORKERS=4
+      - MAX_WORKERS=8
+      - WORKER_CONNECTIONS=1000
+      
+      # Security Configuration
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      
+      # Monitoring Configuration
+      - ENABLE_MONITORING=true
+      - PROMETHEUS_ENABLED=true
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      
+      # Feature Flags
+      - ENABLE_ANALYTICS=true
+      - ENABLE_CACHING=true
+      - ENABLE_RATE_LIMITING=true
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-logs:/app/logs
+      - backend-uploads:/app/uploads
+      - backend-backups:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`api.localhost`) || PathPrefix(`/api/`)"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      - "traefik.http.routers.backend.middlewares=backend-ratelimit,backend-cors"
+      - "traefik.http.middlewares.backend-ratelimit.ratelimit.burst=100"
+      - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowmethods=GET,OPTIONS,PUT,POST,DELETE"
+      - "traefik.http.middlewares.backend-cors.headers.accesscontrolalloworiginlist=*"
+    networks:
+      - sistema-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # ================================
+  # FRONTEND - ULTRA PERFORMANCE
+  # ================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VERSION: ${VERSION:-3.0.0-ultra}
+        VCS_REF: ${VCS_REF:-}
+        VITE_API_URL=https://api.localhost
+        VITE_WS_URL=wss://api.localhost/ws
+        VITE_APP_NAME=Sistema Universal de Eventos
+        VITE_APP_VERSION=${VERSION:-3.0.0-ultra}
+        VITE_ENVIRONMENT=production
+    container_name: sistema-universal-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - frontend-logs:/var/log/nginx
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`app.localhost`) || Host(`localhost`)"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+      - "traefik.http.routers.frontend.middlewares=frontend-headers,frontend-compress"
+      - "traefik.http.middlewares.frontend-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.frontend-compress.compress=true"
+    networks:
+      - sistema-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ================================
+  # DATABASE - POSTGRESQL 15
+  # ================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: sistema-universal-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+      - ./database/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c max_worker_processes=8
+      -c max_parallel_workers_per_gather=4
+      -c max_parallel_workers=8
+      -c max_parallel_maintenance_workers=4
+      -c log_min_duration_statement=1000
+      -c log_checkpoints=on
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_lock_waits=on
+    networks:
+      - sistema-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # ================================
+  # CACHE - REDIS 7
+  # ================================
+  redis:
+    image: redis:7-alpine
+    container_name: sistema-universal-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --timeout 300
+      --tcp-keepalive 60
+      --maxclients 10000
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - sistema-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # ================================
+  # MONITORING - PROMETHEUS
+  # ================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sistema-universal-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/rules:/etc/prometheus/rules
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - sistema-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ================================
+  # MONITORING - GRAFANA
+  # ================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sistema-universal-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=redis-datasource,prometheus
+      - GF_FEATURE_TOGGLES_ENABLE=ngalert
+    networks:
+      - sistema-network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ================================
+  # LOG AGGREGATION - LOKI
+  # ================================
+  loki:
+    image: grafana/loki:latest
+    container_name: sistema-universal-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - sistema-network
+
+  # ================================
+  # BACKUP SERVICE
+  # ================================
+  backup:
+    image: postgres:15-alpine
+    container_name: sistema-universal-backup
+    restart: "no"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - BACKUP_SCHEDULE=0 2 * * *  # Daily at 2 AM
+    volumes:
+      - postgres-data:/var/lib/postgresql/data:ro
+      - backup-data:/backups
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh
+    command: ["/usr/local/bin/backup.sh"]
+    networks:
+      - sistema-network
+    depends_on:
+      - postgres
+    profiles:
+      - backup
+
+# ================================
+# VOLUMES
+# ================================
+volumes:
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/postgres
+  
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/redis
+  
+  prometheus-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/prometheus
+  
+  grafana-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/grafana
+  
+  loki-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/loki
+  
+  backup-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/backups
+  
+  backend-logs:
+    driver: local
+  
+  backend-uploads:
+    driver: local
+  
+  backend-backups:
+    driver: local
+  
+  frontend-logs:
+    driver: local
+
+# ================================
+# NETWORKS
+# ================================
+networks:
+  sistema-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
+      com.docker.network.bridge.name: sistema-br0

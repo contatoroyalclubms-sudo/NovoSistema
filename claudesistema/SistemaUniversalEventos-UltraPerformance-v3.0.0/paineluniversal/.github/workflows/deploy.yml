@@ -1,0 +1,119 @@
+
+name: Deploy Event System
+
+on:
+  push:
+    branches: [ main, production ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: Install Frontend Dependencies
+      working-directory: ./frontend
+      run: npm ci
+    
+    - name: Install Backend Dependencies
+      working-directory: ./backend
+      run: |
+        pip install poetry
+        poetry install
+    
+    - name: Run Frontend Tests
+      working-directory: ./frontend
+      run: npm run test:ci
+    
+    - name: Run Backend Tests
+      working-directory: ./backend
+      run: poetry run pytest --cov=app --cov-report=xml
+    
+    - name: Upload Coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./backend/coverage.xml,./frontend/coverage/lcov.info
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Frontend
+      working-directory: ./frontend
+      run: |
+        npm ci
+        npm run build
+    
+    - name: Build Backend Docker Image
+      run: |
+        docker build -t evento-system-backend ./backend
+        docker tag evento-system-backend:latest ${{ secrets.DOCKER_REGISTRY }}/evento-system-backend:latest
+    
+    - name: Build Frontend Docker Image
+      run: |
+        docker build -t evento-system-frontend ./frontend
+        docker tag evento-system-frontend:latest ${{ secrets.DOCKER_REGISTRY }}/evento-system-frontend:latest
+    
+    - name: Push to Registry
+      run: |
+        echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+        docker push ${{ secrets.DOCKER_REGISTRY }}/evento-system-backend:latest
+        docker push ${{ secrets.DOCKER_REGISTRY }}/evento-system-frontend:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/production'
+    
+    steps:
+    - name: Deploy to Production
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.PROD_HOST }}
+        username: ${{ secrets.PROD_USER }}
+        key: ${{ secrets.PROD_SSH_KEY }}
+        script: |
+          cd /app/evento-system
+          docker-compose pull
+          docker-compose up -d --no-deps --build
+          docker-compose run --rm backend alembic upgrade head
+          docker system prune -f

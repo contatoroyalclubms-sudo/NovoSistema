@@ -1,0 +1,337 @@
+/* Animações Ultra-Modernas para Landing Page */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Animações de partículas flutuantes */
+@keyframes float-particle {
+  0%, 100% { 
+    transform: translateY(0px) translateX(0px) rotate(0deg);
+    opacity: 0.3;
+  }
+  25% { 
+    transform: translateY(-30px) translateX(20px) rotate(90deg);
+    opacity: 0.8;
+  }
+  50% { 
+    transform: translateY(-15px) translateX(-10px) rotate(180deg);
+    opacity: 1;
+  }
+  75% { 
+    transform: translateY(10px) translateX(30px) rotate(270deg);
+    opacity: 0.5;
+  }
+}
+
+/* Animação de flutuação suave */
+@keyframes float {
+  0%, 100% { 
+    transform: translateY(0px);
+  }
+  50% { 
+    transform: translateY(-20px);
+  }
+}
+
+/* Animação de flutuação com delay */
+@keyframes float-delayed {
+  0%, 100% { 
+    transform: translateY(0px);
+  }
+  50% { 
+    transform: translateY(-15px);
+  }
+}
+
+/* Animação para features */
+@keyframes feature-float {
+  0%, 100% { 
+    transform: translateY(0px);
+  }
+  50% { 
+    transform: translateY(-10px);
+  }
+}
+
+/* Animação de pulso com brilho */
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.6);
+    transform: scale(1.05);
+  }
+}
+
+/* Animação de shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Animação de onda neural */
+@keyframes neural-wave {
+  0%, 100% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1.5) scaleX(1.2);
+    opacity: 0.8;
+  }
+}
+
+/* Animação de rotação 3D */
+@keyframes rotate-3d {
+  0% {
+    transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
+  }
+  50% {
+    transform: perspective(1000px) rotateY(180deg) rotateX(10deg);
+  }
+  100% {
+    transform: perspective(1000px) rotateY(360deg) rotateX(0deg);
+  }
+}
+
+/* Animação de escala pulsante */
+@keyframes scale-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Animação de texto digitando */
+@keyframes typewriter {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* Animação de borda neon */
+@keyframes neon-border {
+  0%, 100% {
+    border-color: rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    border-color: rgba(236, 72, 153, 0.8);
+    box-shadow: 0 0 40px rgba(236, 72, 153, 0.5);
+  }
+}
+
+/* Classes utilitárias para animações */
+.animate-particle {
+  animation: float-particle 8s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 6s ease-in-out infinite 2s;
+}
+
+.animate-feature-float {
+  animation: feature-float 4s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.animate-neural-wave {
+  animation: neural-wave 4s ease-in-out infinite;
+}
+
+.animate-rotate-3d {
+  animation: rotate-3d 20s linear infinite;
+}
+
+.animate-scale-pulse {
+  animation: scale-pulse 2s ease-in-out infinite;
+}
+
+.animate-neon-border {
+  animation: neon-border 3s ease-in-out infinite;
+}
+
+/* Efeitos de hover ultra-modernos */
+.hover-glow:hover {
+  box-shadow: 
+    0 0 30px rgba(139, 92, 246, 0.4),
+    0 0 60px rgba(236, 72, 153, 0.2),
+    inset 0 0 30px rgba(255, 255, 255, 0.1);
+  transform: translateY(-5px) scale(1.02);
+  transition: all 0.3s ease-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-10px) rotateX(5deg);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.hover-morph:hover {
+  border-radius: 25% 75% 75% 25% / 25% 25% 75% 75%;
+  transition: all 0.6s ease-in-out;
+}
+
+/* Gradientes animados */
+.gradient-animated {
+  background: linear-gradient(
+    45deg,
+    #8b5cf6,
+    #ec4899,
+    #06b6d4,
+    #8b5cf6
+  );
+  background-size: 400% 400%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Efeito de vidro ultra-moderno */
+.glass-ultra {
+  backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Texto com efeito holográfico */
+.holographic-text {
+  background: linear-gradient(
+    45deg,
+    #8b5cf6 0%,
+    #ec4899 25%,
+    #06b6d4 50%,
+    #8b5cf6 75%,
+    #ec4899 100%
+  );
+  background-size: 400% 400%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* Efeitos de partículas interativas */
+.particle-field {
+  position: relative;
+  overflow: hidden;
+}
+
+.particle-field::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 60% 40%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+  animation: neural-wave 10s ease-in-out infinite;
+}
+
+/* Botões com efeitos quânticos */
+.quantum-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.quantum-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.quantum-button:hover::before {
+  left: 100%;
+}
+
+/* Responsividade para animações */
+@media (prefers-reduced-motion: reduce) {
+  .animate-particle,
+  .animate-float,
+  .animate-float-delayed,
+  .animate-feature-float,
+  .animate-pulse-glow,
+  .animate-shimmer,
+  .animate-neural-wave,
+  .animate-rotate-3d,
+  .animate-scale-pulse,
+  .animate-neon-border,
+  .gradient-animated {
+    animation: none;
+  }
+}
+
+/* Dark mode otimizado */
+@media (prefers-color-scheme: dark) {
+  .glass-ultra {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Performance otimizada para dispositivos móveis */
+@media (max-width: 768px) {
+  .animate-particle {
+    animation-duration: 12s;
+  }
+  
+  .animate-rotate-3d {
+    animation: none;
+  }
+  
+  .hover-glow:hover,
+  .hover-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
