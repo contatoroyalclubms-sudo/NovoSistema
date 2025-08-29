@@ -536,3 +536,59 @@ class MetricaPromoter(Base):
     
     promoter = relationship("Usuario")
     evento = relationship("Evento")
+
+
+
+class TipoTablet(enum.Enum):
+    POS = "pos"
+    KIOSK = "kiosk"
+    WAITER = "waiter"
+    KITCHEN = "kitchen"
+
+class StatusTablet(enum.Enum):
+    CONECTADO = "conectado"
+    DESCONECTADO = "desconectado"
+    CONECTANDO = "conectando"
+    ERRO = "erro"
+
+class Tablet(Base):
+    __tablename__ = "tablets"
+    
+    id = Column(String, primary_key=True, index=True)
+    nome = Column(String, nullable=False)
+    ip = Column(String, nullable=False)
+    porta = Column(Integer, default=8080)
+    tipo = Column(Enum(TipoTablet), default=TipoTablet.POS)
+    status = Column(Enum(StatusTablet), default=StatusTablet.DESCONECTADO)
+    empresa_id = Column(String, ForeignKey("empresas.id"), nullable=False)
+    
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    ultima_conexao = Column(DateTime(timezone=True))
+    
+    empresa = relationship("Empresa")
+    logs = relationship("TabletLog", back_populates="tablet")
+    configuracao_meep = relationship("ConfiguracaoMeep", back_populates="tablet", uselist=False)
+
+class TabletLog(Base):
+    __tablename__ = "tablet_logs"
+    
+    id = Column(String, primary_key=True, index=True)
+    tablet_id = Column(String, ForeignKey("tablets.id"), nullable=False)
+    evento = Column(String, nullable=False)
+    detalhes = Column(Text)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    
+    tablet = relationship("Tablet", back_populates="logs")
+
+class ConfiguracaoMeep(Base):
+    __tablename__ = "configuracoes_meep"
+    
+    id = Column(String, primary_key=True, index=True)
+    tablet_id = Column(String, ForeignKey("tablets.id"), nullable=False)
+    configuracao = Column(Text, nullable=False)
+    versao = Column(String, default="2.0.0")
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    tablet = relationship("Tablet", back_populates="configuracao_meep")

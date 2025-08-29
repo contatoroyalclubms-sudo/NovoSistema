@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator, ConfigDict
 from datetime import datetime, date
 from typing import Optional, List
 from decimal import Decimal
+from enum import Enum
 from .models import StatusEvento, TipoLista, StatusTransacao, TipoUsuario, TipoProduto, StatusProduto, TipoComanda, StatusComanda, StatusVendaPDV, TipoPagamentoPDV
 import re
 
@@ -732,3 +733,61 @@ class FiltrosRanking(BaseModel):
     badge_nivel: Optional[str] = None
     tipo_ranking: Optional[str] = "geral"
     limit: int = 20
+
+class TipoTablet(str, Enum):
+    POS = "pos"
+    KIOSK = "kiosk"
+    WAITER = "waiter"
+    KITCHEN = "kitchen"
+
+class StatusTablet(str, Enum):
+    CONECTADO = "conectado"
+    DESCONECTADO = "desconectado"
+    CONECTANDO = "conectando"
+    ERRO = "erro"
+
+class TabletCreate(BaseModel):
+    nome: str
+    ip: str
+    porta: int = 8080
+    tipo: TipoTablet = TipoTablet.POS
+
+class TabletUpdate(BaseModel):
+    nome: Optional[str] = None
+    ip: Optional[str] = None
+    porta: Optional[int] = None
+    tipo: Optional[TipoTablet] = None
+    status: Optional[StatusTablet] = None
+
+class TabletResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    nome: str
+    ip: str
+    porta: int
+    tipo: TipoTablet
+    status: StatusTablet
+    empresa_id: str
+    criado_em: datetime
+    atualizado_em: datetime
+    ultima_conexao: Optional[datetime] = None
+
+class TabletLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    tablet_id: str
+    evento: str
+    detalhes: Optional[str] = None
+    timestamp: datetime
+
+class ConfiguracaoMeepResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    tablet_id: str
+    configuracao: str
+    versao: str
+    criado_em: datetime
+    atualizado_em: datetime

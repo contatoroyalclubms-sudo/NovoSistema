@@ -14,6 +14,7 @@ import DashboardAvancado from './components/dashboard/DashboardAvancado';
 import ListasModule from './components/listas/ListasModule';
 import CaixaEvento from './components/financeiro/CaixaEvento';
 import RankingModule from './components/ranking/RankingModule';
+import TabletIntegrationComponent from './components/tablets/TabletIntegrationComponent';
 import './App.css';
 
 function App() {
@@ -99,6 +100,11 @@ function App() {
                     <Route path="/relatorios" element={
                       <ProtectedRoute requiredRoles={['admin', 'promoter']}>
                         <DashboardAvancado />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/tablets" element={
+                      <ProtectedRoute requiredRoles={['admin']}>
+                        <TabletIntegrationComponent />
                       </ProtectedRoute>
                     } />
                     <Route path="/configuracoes" element={
