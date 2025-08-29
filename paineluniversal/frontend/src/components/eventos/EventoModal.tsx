@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { Alert, AlertDescription } from '../ui/alert';
+// import { Alert, AlertDescription } from '../ui/alert'; // Available for future use
 import { Evento, EventoCreate } from '../../services/api';
 
 interface EventoModalProps {

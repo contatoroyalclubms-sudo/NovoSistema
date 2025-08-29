@@ -4,8 +4,18 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Card, CardContent } from '../ui/card';
 import { Award, Trophy, Star, Crown, Target, Medal } from 'lucide-react';
-import { gamificacaoService } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
+
+interface Conquista {
+  id: number;
+  conquista_nome: string;
+  conquista_descricao: string;
+  badge_nivel: string;
+  icone: string;
+  valor_alcancado: number;
+  data_conquista: string;
+  evento_nome: string | null;
+}
 
 interface ConquistasModalProps {
   isOpen: boolean;
@@ -13,9 +23,11 @@ interface ConquistasModalProps {
   promoter: any;
 }
 
+type BadgeLevel = 'lenda' | 'diamante' | 'platina' | 'ouro' | 'prata' | 'bronze';
+
 const ConquistasModal: React.FC<ConquistasModalProps> = ({ isOpen, onClose, promoter }) => {
   const { toast } = useToast();
-  const [conquistas, setConquistas] = useState([]);
+  const [conquistas, setConquistas] = useState<Conquista[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -62,7 +74,7 @@ const ConquistasModal: React.FC<ConquistasModalProps> = ({ isOpen, onClose, prom
   };
 
   const getBadgeIcon = (badge: string) => {
-    const icons = {
+    const icons: Record<BadgeLevel, React.ReactElement> = {
       'lenda': <Crown className="h-5 w-5 text-purple-600" />,
       'diamante': <Star className="h-5 w-5 text-blue-600" />,
       'platina': <Award className="h-5 w-5 text-gray-400" />,
@@ -70,11 +82,11 @@ const ConquistasModal: React.FC<ConquistasModalProps> = ({ isOpen, onClose, prom
       'prata': <Medal className="h-5 w-5 text-gray-500" />,
       'bronze': <Target className="h-5 w-5 text-orange-600" />
     };
-    return icons[badge] || <Target className="h-5 w-5 text-gray-400" />;
+    return icons[badge as BadgeLevel] || <Target className="h-5 w-5 text-gray-400" />;
   };
 
   const getBadgeColor = (badge: string) => {
-    const colors = {
+    const colors: Record<BadgeLevel, string> = {
       'lenda': 'bg-purple-100 text-purple-800 border-purple-200',
       'diamante': 'bg-blue-100 text-blue-800 border-blue-200',
       'platina': 'bg-gray-100 text-gray-800 border-gray-200',
@@ -82,7 +94,7 @@ const ConquistasModal: React.FC<ConquistasModalProps> = ({ isOpen, onClose, prom
       'prata': 'bg-gray-100 text-gray-600 border-gray-200',
       'bronze': 'bg-orange-100 text-orange-800 border-orange-200'
     };
-    return colors[badge] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return colors[badge as BadgeLevel] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   return (
