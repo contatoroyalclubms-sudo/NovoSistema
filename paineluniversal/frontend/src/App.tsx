@@ -15,6 +15,7 @@ import ListasModule from './components/listas/ListasModule';
 import CaixaEvento from './components/financeiro/CaixaEvento';
 import RankingModule from './components/ranking/RankingModule';
 import TabletIntegrationComponent from './components/tablets/TabletIntegrationComponent';
+import MeepClientManagement from './components/clients/MeepClientManagement';
 import './App.css';
 
 function App() {
@@ -105,6 +106,11 @@ function App() {
                     <Route path="/tablets" element={
                       <ProtectedRoute requiredRoles={['admin']}>
                         <TabletIntegrationComponent />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/clientes-meep" element={
+                      <ProtectedRoute requiredRoles={['admin']}>
+                        <MeepClientManagement />
                       </ProtectedRoute>
                     } />
                     <Route path="/configuracoes" element={

@@ -592,3 +592,64 @@ class ConfiguracaoMeep(Base):
     atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     tablet = relationship("Tablet", back_populates="configuracao_meep")
+
+class StatusMeepClient(enum.Enum):
+    ATIVO = "ativo"
+    BLOQUEADO = "bloqueado"
+    INATIVO = "inativo"
+
+class SexoMeepClient(enum.Enum):
+    MASCULINO = "M"
+    FEMININO = "F"
+    OUTRO = "O"
+
+class ClientCategory(Base):
+    __tablename__ = "client_categories"
+    
+    id = Column(String, primary_key=True, index=True)
+    descricao = Column(String(255), nullable=False)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    empresa = relationship("Empresa")
+    clientes = relationship("MeepClient", back_populates="categoria")
+
+class MeepClient(Base):
+    __tablename__ = "meep_clients"
+    
+    id = Column(String, primary_key=True, index=True)
+    nome = Column(String(255), nullable=False)
+    cpf = Column(String(14), index=True)
+    identificador = Column(String(100), index=True)
+    telefone = Column(String(20))
+    email = Column(String(255))
+    data_nascimento = Column(Date)
+    sexo = Column(Enum(SexoMeepClient))
+    categoria_id = Column(String, ForeignKey("client_categories.id"))
+    status = Column(Enum(StatusMeepClient), default=StatusMeepClient.ATIVO)
+    valor_em_aberto = Column(Numeric(10, 2), default=0)
+    nome_na_lista = Column(Boolean, default=False)
+    has_alert = Column(Boolean, default=False)
+    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    empresa = relationship("Empresa")
+    categoria = relationship("ClientCategory", back_populates="clientes")
+    historico_bloqueios = relationship("ClientBlockHistory", back_populates="cliente")
+
+class ClientBlockHistory(Base):
+    __tablename__ = "client_block_history"
+    
+    id = Column(String, primary_key=True, index=True)
+    cliente_id = Column(String, ForeignKey("meep_clients.id"), nullable=False)
+    bloqueado_por = Column(String(255))
+    data_bloqueio = Column(DateTime(timezone=True))
+    razao_bloqueio = Column(Text)
+    desbloqueado_por = Column(String(255))
+    data_desbloqueio = Column(DateTime(timezone=True))
+    razao_desbloqueio = Column(Text)
+    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    
+    cliente = relationship("MeepClient", back_populates="historico_bloqueios")

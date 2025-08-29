@@ -791,3 +791,83 @@ class ConfiguracaoMeepResponse(BaseModel):
     versao: str
     criado_em: datetime
     atualizado_em: datetime
+
+class StatusMeepClient(str, Enum):
+    ATIVO = "ativo"
+    BLOQUEADO = "bloqueado"
+    INATIVO = "inativo"
+
+class SexoMeepClient(str, Enum):
+    MASCULINO = "M"
+    FEMININO = "F"
+    OUTRO = "O"
+
+class ClientCategoryCreate(BaseModel):
+    descricao: str
+
+class ClientCategoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    descricao: str
+    empresa_id: int
+    criado_em: datetime
+    atualizado_em: datetime
+
+class MeepClientCreate(BaseModel):
+    nome: str
+    cpf: Optional[str] = None
+    identificador: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    data_nascimento: Optional[date] = None
+    sexo: Optional[SexoMeepClient] = None
+    categoria_id: Optional[str] = None
+    nome_na_lista: bool = False
+
+class MeepClientUpdate(BaseModel):
+    nome: Optional[str] = None
+    cpf: Optional[str] = None
+    identificador: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    data_nascimento: Optional[date] = None
+    sexo: Optional[SexoMeepClient] = None
+    categoria_id: Optional[str] = None
+    status: Optional[StatusMeepClient] = None
+    valor_em_aberto: Optional[Decimal] = None
+    nome_na_lista: Optional[bool] = None
+    has_alert: Optional[bool] = None
+
+class MeepClientResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    nome: str
+    cpf: Optional[str] = None
+    identificador: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    data_nascimento: Optional[date] = None
+    sexo: Optional[SexoMeepClient] = None
+    categoria_id: Optional[str] = None
+    status: StatusMeepClient
+    valor_em_aberto: Decimal
+    nome_na_lista: bool
+    has_alert: bool
+    empresa_id: int
+    criado_em: datetime
+    atualizado_em: datetime
+
+class ClientBlockHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str
+    cliente_id: str
+    bloqueado_por: Optional[str] = None
+    data_bloqueio: Optional[datetime] = None
+    razao_bloqueio: Optional[str] = None
+    desbloqueado_por: Optional[str] = None
+    data_desbloqueio: Optional[datetime] = None
+    razao_desbloqueio: Optional[str] = None
+    criado_em: datetime
