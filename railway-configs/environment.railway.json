@@ -1,0 +1,47 @@
+{
+  "production": {
+    "NODE_ENV": "production",
+    "PORT": "3000",
+    "BUILD_COMMAND": "npm install && npm run build",
+    "START_COMMAND": "npm run serve",
+    "HEALTH_CHECK": "/",
+    "RESTART_POLICY": "ON_FAILURE",
+    "LOG_LEVEL": "info",
+    "CORS_ORIGINS": "*",
+    "MAX_REQUEST_SIZE": "10mb",
+    "TIMEOUT": "30000",
+    "RATE_LIMIT": "100",
+    "CACHE_ENABLED": "true",
+    "COMPRESSION": "true"
+  },
+  "staging": {
+    "NODE_ENV": "staging",
+    "PORT": "3001",
+    "BUILD_COMMAND": "npm install && npm run build",
+    "START_COMMAND": "npm run dev",
+    "HEALTH_CHECK": "/",
+    "RESTART_POLICY": "ALWAYS",
+    "LOG_LEVEL": "debug",
+    "CORS_ORIGINS": "*",
+    "MAX_REQUEST_SIZE": "10mb",
+    "TIMEOUT": "60000",
+    "RATE_LIMIT": "1000",
+    "CACHE_ENABLED": "false",
+    "COMPRESSION": "true"
+  },
+  "development": {
+    "NODE_ENV": "development",
+    "PORT": "3000",
+    "BUILD_COMMAND": "npm install",
+    "START_COMMAND": "npm run dev",
+    "HEALTH_CHECK": "/",
+    "RESTART_POLICY": "NO",
+    "LOG_LEVEL": "verbose",
+    "CORS_ORIGINS": "*",
+    "MAX_REQUEST_SIZE": "50mb",
+    "TIMEOUT": "120000",
+    "RATE_LIMIT": "10000",
+    "CACHE_ENABLED": "false",
+    "COMPRESSION": "false"
+  }
+}

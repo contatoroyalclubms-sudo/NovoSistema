@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "deploymentStrategy": "rolling",
+  "stages": [
+    {
+      "name": "pre-deploy",
+      "steps": [
+        {
+          "name": "validate-structure",
+          "command": "node mcp-agents/scripts/validate.js",
+          "continueOnError": false
+        },
+        {
+          "name": "run-tests",
+          "command": "npm test",
+          "continueOnError": false
+        }
+      ]
+    },
+    {
+      "name": "build",
+      "parallel": true,
+      "steps": [
+        {
+          "name": "build-frontend",
+          "command": "cd paineluniversal/frontend && npm run build",
+          "timeout": 300
+        },
+        {
+          "name": "prepare-backend",
+          "command": "cd paineluniversal/backend && pip install -r requirements.txt",
+          "timeout": 300
+        }
+      ]
+    },
+    {
+      "name": "deploy",
+      "steps": [
+        {
+          "name": "deploy-to-railway",
+          "command": "railway up",
+          "environment": "production"
+        }
+      ]
+    },
+    {
+      "name": "post-deploy",
+      "steps": [
+        {
+          "name": "health-check",
+          "command": "node mcp-agents/scripts/health-check.js",
+          "retries": 3,
+          "retryDelay": 10
+        },
+        {
+          "name": "smoke-tests",
+          "command": "node mcp-agents/scripts/smoke-tests.js",
+          "continueOnError": true
+        }
+      ]
+    }
+  ],
+  "rollback": {
+    "automatic": true,
+    "conditions": [
+      "health-check-failed",
+      "error-rate-exceeded",
+      "response-time-exceeded"
+    ],
+    "strategy": "immediate"
+  },
+  "notifications": {
+    "enabled": true,
+    "channels": ["console", "log"],
+    "events": [
+      "deploy-started",
+      "deploy-completed",
+      "deploy-failed",
+      "rollback-initiated"
+    ]
+  }
+}

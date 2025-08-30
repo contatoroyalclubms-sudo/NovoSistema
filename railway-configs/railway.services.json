@@ -1,0 +1,42 @@
+{
+  "services": {
+    "frontend": {
+      "source": {
+        "repo": "contatoroyalclubms-sudo/NovoSistema",
+        "rootDirectory": "paineluniversal/frontend"
+      },
+      "build": {
+        "command": "npm install && npm run build"
+      },
+      "start": {
+        "command": "npx serve -s dist -l $PORT"
+      },
+      "healthcheck": {
+        "path": "/",
+        "interval": 60
+      }
+    },
+    "backend": {
+      "source": {
+        "repo": "contatoroyalclubms-sudo/NovoSistema", 
+        "rootDirectory": "paineluniversal/backend"
+      },
+      "build": {
+        "command": "pip install -r requirements.txt"
+      },
+      "start": {
+        "command": "uvicorn main:app --host 0.0.0.0 --port $PORT"
+      },
+      "healthcheck": {
+        "path": "/health",
+        "interval": 60
+      }
+    }
+  },
+  "environments": {
+    "production": {
+      "NODE_ENV": "production",
+      "PYTHONUNBUFFERED": "1"
+    }
+  }
+}
