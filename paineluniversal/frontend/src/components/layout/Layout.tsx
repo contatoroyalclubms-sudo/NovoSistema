@@ -15,7 +15,9 @@ import {
   UserCheck,
   Smartphone,
   DollarSign,
-  Trophy
+  Trophy,
+  Monitor,
+  Users2
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -44,6 +46,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { icon: Users, label: 'Listas & Convidados', path: '/listas', roles: ['admin', 'promoter'] },
     { icon: DollarSign, label: 'Caixa & Financeiro', path: '/financeiro', roles: ['admin', 'promoter'] },
     { icon: Trophy, label: 'Ranking & Gamificação', path: '/ranking', roles: ['admin', 'promoter'] },
+    { icon: Monitor, label: 'Tablets MEEP', path: '/tablets', roles: ['admin'] },
+    { icon: Users2, label: 'Clientes MEEP', path: '/clientes-meep', roles: ['admin'] },
     { icon: Users, label: 'Usuários', path: '/usuarios', roles: ['admin'] },
     { icon: Building2, label: 'Empresas', path: '/empresas', roles: ['admin'] },
     { icon: FileText, label: 'Relatórios', path: '/relatorios', roles: ['admin', 'promoter'] },
