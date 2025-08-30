@@ -39,15 +39,84 @@ export default function CreateEventPage() {
             </p>
           </div>
 
-          {/* Content Area - Ready for ETAPA 2 */}
+          {/* ETAPA 2: Formulário Básico */}
           <div className="bg-white/10 backdrop-blur-sm rounded-lg p-8 border border-white/20">
-            <div className="text-center text-white">
-              <p className="text-xl mb-4">🎯 ETAPA 1 CONCLUÍDA</p>
-              <p className="text-gray-300">
-                Página de criação de eventos criada com sucesso!
-              </p>
-              <p className="text-gray-400 mt-2">
-                Aguardando confirmação para prosseguir com ETAPA 2 (Formulário Básico)
+            <form className="space-y-6">
+              {/* Nome do Evento */}
+              <div>
+                <label htmlFor="eventName" className="block text-white text-sm font-medium mb-2">
+                  Nome do Evento *
+                </label>
+                <input
+                  type="text"
+                  id="eventName"
+                  name="eventName"
+                  required
+                  className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Digite o nome do evento"
+                />
+              </div>
+
+              {/* Data e Hora */}
+              <div>
+                <label htmlFor="eventDateTime" className="block text-white text-sm font-medium mb-2">
+                  Data e Hora *
+                </label>
+                <input
+                  type="datetime-local"
+                  id="eventDateTime"
+                  name="eventDateTime"
+                  required
+                  className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Local */}
+              <div>
+                <label htmlFor="eventLocation" className="block text-white text-sm font-medium mb-2">
+                  Local *
+                </label>
+                <input
+                  type="text"
+                  id="eventLocation"
+                  name="eventLocation"
+                  required
+                  className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Digite o local do evento"
+                />
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label htmlFor="eventDescription" className="block text-white text-sm font-medium mb-2">
+                  Descrição *
+                </label>
+                <textarea
+                  id="eventDescription"
+                  name="eventDescription"
+                  required
+                  rows={4}
+                  className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                  placeholder="Descreva os detalhes do evento"
+                />
+              </div>
+
+              {/* Botão Criar Evento */}
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-transparent"
+                >
+                  Criar Evento
+                </button>
+              </div>
+            </form>
+
+            {/* Status ETAPA 2 */}
+            <div className="mt-8 pt-6 border-t border-white/20 text-center text-white">
+              <p className="text-lg mb-2">🎯 ETAPA 2 - FORMULÁRIO BÁSICO</p>
+              <p className="text-gray-300 text-sm">
+                Campos obrigatórios implementados com validação HTML5
               </p>
             </div>
           </div>
