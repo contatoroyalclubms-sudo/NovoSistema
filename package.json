@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "install": "cd paineluniversal/frontend && npm install",
+    "preinstall": "cd paineluniversal/frontend && npm install",
     "build": "cd paineluniversal/frontend && npm run build",
-    "start": "cd paineluniversal/frontend && npx serve -s dist -p ${PORT:-3000}",
-    "dev": "cd paineluniversal/frontend && npm run dev"
+    "start": "cd paineluniversal/frontend && npx serve -s dist -l ${PORT:-3000}",
+    "dev": "cd paineluniversal/frontend && npm run dev",
+    "postbuild": "echo 'Build completed successfully'"
   },
   "engines": {
     "node": ">=18.0.0",
