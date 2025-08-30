@@ -1,37 +1,179 @@
 [tool.poetry]
-name = "app"
-version = "0.1.0"
-description = ""
-authors = ["Desenvolvedor <dev@example.com>"]
+name = "sistema-universal-eventos-backend"
+version = "2.0.0"
+description = "Sistema Universal de Gestão de Eventos - Backend API"
+authors = ["Desenvolvedor <dev@exemplo.com>"]
 readme = "README.md"
+packages = [
+    { include = "app" }
+]
 
 [tool.poetry.dependencies]
-python = "^3.12"
-fastapi = {extras = ["standard"], version = "^0.116.1"}
-psycopg = {extras = ["binary"], version = "^3.2.9"}
-sqlalchemy = "^2.0.42"
-alembic = "^1.16.4"
-passlib = {extras = ["bcrypt"], version = "^1.7.4"}
-python-jose = {extras = ["cryptography"], version = "^3.5.0"}
-python-multipart = "^0.0.20"
-pydantic-settings = "^2.10.1"
-python-dotenv = "^1.1.1"
-reportlab = "^4.0.0"
-pandas = "^2.0.0"
-qrcode = "^7.4.2"
-pillow = "^10.0.0"
-aiohttp = "^3.9.0"
+python = "^3.9"
+
+# Framework Web
+fastapi = "^0.104.1"
+uvicorn = { extras = ["standard"], version = "^0.24.0" }
+
+# Banco de Dados
+sqlalchemy = "^2.0.23"
+alembic = "^1.12.1"
+psycopg2-binary = "^2.9.7"
+
+# Validação e Serialização
+pydantic = { extras = ["email"], version = "^2.5.0" }
+
+# Autenticação e Segurança
+python-jose = { extras = ["cryptography"], version = "^3.3.0" }
+passlib = { extras = ["bcrypt"], version = "^1.7.4" }
+python-multipart = "^0.0.6"
+
+# Utilitários
+python-dotenv = "^1.0.0"
+qrcode = { extras = ["pil"], version = "^7.4.2" }
+pillow = "^10.1.0"
+requests = "^2.31.0"
+celery = "^5.3.4"
+redis = "^5.0.1"
+
+# WebSockets e Comunicação
 websockets = "^12.0"
-schedule = "^1.2.0"
-openpyxl = "^3.1.0"
+
+# Email
+fastapi-mail = "^1.4.1"
+
+# Logs e Monitoramento
+loguru = "^0.7.2"
+
+# Validação de dados
+phonenumbers = "^8.13.26"
+validate-docbr = "^1.10.0"
+
+# Imagens e Uploads
+aiofiles = "^23.2.0"
+
+# Novos serviços implementados  
+apscheduler = "^3.10.4"
+openai = "^1.3.0"
+prometheus-client = "^0.22.1"
+
+# Ultra-Performance Dependencies (Windows Compatible)
+orjson = "^3.9.10"  # Ultra-fast JSON serialization
+lz4 = "^4.3.2"     # Fast compression for cache
+httptools = "^0.6.1" # Fast HTTP parser
+kombu = "^5.3.4"    # Message queue support for Celery
+aioredis = "^2.0.1"  # Async Redis client
+
+# OpenTelemetry and Monitoring
+psutil = "^5.9.6"  # System monitoring
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+httpx = "^0.25.2"
+black = "^23.11.0"
+isort = "^5.12.0"
+flake8 = "^6.1.0"
+mypy = "^1.7.1"
+pre-commit = "^3.5.0"
+
+[tool.poetry.group.test.dependencies]
 pytest-cov = "^4.1.0"
-pytest-asyncio = "^0.23.0"
-httpx = "^0.27.0"
+factory-boy = "^3.3.0"
+faker = "^20.1.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.black]
+line-length = 100
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 100
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "celery.*",
+    "redis.*",
+    "qrcode.*",
+    "PIL.*",
+    "fastapi_mail.*",
+    "cpf_cnpj.*",
+    "phonenumbers.*"
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "-ra",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml"
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests"
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:"
+]

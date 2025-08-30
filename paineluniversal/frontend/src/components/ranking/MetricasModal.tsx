@@ -3,26 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { BarChart3, TrendingUp, Users, Target, Calendar, Award } from 'lucide-react';
+import { gamificacaoService } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
-
-interface Metricas {
-  promoter_id: any;
-  promoter_nome: any;
-  periodo_inicio: string;
-  periodo_fim: string;
-  total_vendas: any;
-  receita_gerada: any;
-  total_convidados: any;
-  total_presentes: number;
-  taxa_presenca: any;
-  taxa_conversao: any;
-  crescimento_vendas: any;
-  posicao_vendas: any;
-  posicao_presenca: any;
-  posicao_geral: any;
-  badge_atual: any;
-  conquistas_recentes: any[];
-}
 
 interface MetricasModalProps {
   isOpen: boolean;
@@ -32,7 +14,7 @@ interface MetricasModalProps {
 
 const MetricasModal: React.FC<MetricasModalProps> = ({ isOpen, onClose, promoter }) => {
   const { toast } = useToast();
-  const [metricas, setMetricas] = useState<Metricas | null>(null);
+  const [metricas, setMetricas] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {

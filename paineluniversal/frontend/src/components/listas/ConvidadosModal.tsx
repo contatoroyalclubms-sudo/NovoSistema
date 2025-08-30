@@ -4,11 +4,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
-import { Card, CardContent } from '../ui/card';
-// import { CardHeader, CardTitle } from '../ui/card'; // Available for future use
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useToast } from '../../hooks/use-toast';
-import { Search, QrCode, Users } from 'lucide-react';
-// import { Download, UserCheck } from 'lucide-react'; // Available for future use
+import { Search, Download, QrCode, UserCheck, Users } from 'lucide-react';
 import { transacaoService, checkinService } from '../../services/api';
 
 interface ConvidadosModalProps {

@@ -1,0 +1,182 @@
+# ================================
+# ULTRA-PERFORMANCE REACT FRONTEND
+# Multi-stage Docker build optimized for production
+# ================================
+
+# Stage 1: Dependencies Installation
+FROM node:20-alpine as deps-installer
+
+# Set build arguments
+ARG BUILD_DATE
+ARG VERSION=3.0.0-ultra
+ARG VCS_REF
+
+# Add metadata
+LABEL maintainer="Sistema Universal Team" \
+      version="${VERSION}" \
+      build-date="${BUILD_DATE}" \
+      vcs-ref="${VCS_REF}" \
+      description="Ultra-performance React frontend"
+
+# Install system dependencies for better performance
+RUN apk add --no-cache \
+    git \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy dependency files for better Docker layer caching
+COPY package.json package-lock.json ./
+
+# Install dependencies with optimizations
+RUN npm ci --only=production --silent --no-audit --no-fund \
+    && npm cache clean --force
+
+# Stage 2: Development Dependencies (for building)
+FROM deps-installer as build-deps
+
+# Install all dependencies including dev dependencies for building
+RUN npm ci --silent --no-audit --no-fund \
+    && npm cache clean --force
+
+# Stage 3: Application Builder
+FROM build-deps as app-builder
+
+# Build arguments for runtime configuration
+ARG VITE_API_URL=http://localhost:8000
+ARG VITE_WS_URL=ws://localhost:8000/ws
+ARG VITE_APP_NAME="Sistema Universal de Eventos"
+ARG VITE_APP_VERSION=3.0.0-ultra
+ARG VITE_ENVIRONMENT=production
+ARG ANALYZE=false
+
+# Set environment variables for build
+ENV NODE_ENV=production \
+    VITE_API_URL=$VITE_API_URL \
+    VITE_WS_URL=$VITE_WS_URL \
+    VITE_APP_NAME=$VITE_APP_NAME \
+    VITE_APP_VERSION=$VITE_APP_VERSION \
+    VITE_ENVIRONMENT=$VITE_ENVIRONMENT \
+    ANALYZE=$ANALYZE
+
+WORKDIR /app
+
+# Copy source code
+COPY . .
+
+# Remove unnecessary files
+RUN find . -name "*.test.ts" -delete \
+    && find . -name "*.test.tsx" -delete \
+    && find . -name "*.spec.ts" -delete \
+    && find . -name "*.spec.tsx" -delete \
+    && rm -rf tests/ coverage/ .nyc_output/
+
+# Build application with optimizations
+RUN npm run build
+
+# Analyze bundle if requested
+RUN if [ "$ANALYZE" = "true" ]; then npm run analyze; fi
+
+# Stage 4: Nginx Base
+FROM nginx:alpine as nginx-base
+
+# Install additional tools
+RUN apk add --no-cache \
+    curl \
+    gzip \
+    brotli \
+    && rm -rf /var/cache/apk/*
+
+# Create nginx user and directories
+RUN addgroup -g 1000 -S nginx \
+    && adduser -S -D -H -u 1000 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
+
+# Stage 5: Production Runtime
+FROM nginx-base as production
+
+WORKDIR /usr/share/nginx/html
+
+# Copy built application from builder
+COPY --from=app-builder /app/dist /usr/share/nginx/html
+
+# Copy optimized nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY --chown=nginx:nginx docker-entrypoint.sh /docker-entrypoint.sh
+
+# Pre-compress static assets for better performance
+RUN find /usr/share/nginx/html -type f \( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.svg" \) \
+    -exec gzip -k -9 {} \; \
+    && find /usr/share/nginx/html -type f \( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.svg" \) \
+    -exec brotli -k -q 11 {} \;
+
+# Set proper permissions
+RUN chown -R nginx:nginx /usr/share/nginx/html \
+    && chmod -R 755 /usr/share/nginx/html \
+    && chmod +x /docker-entrypoint.sh
+
+# Create cache directories
+RUN mkdir -p /var/cache/nginx/client_temp \
+    && chown -R nginx:nginx /var/cache/nginx \
+    && chmod -R 755 /var/cache/nginx
+
+# Switch to non-root user
+USER nginx
+
+# Expose port
+EXPOSE 8080
+
+# Enhanced health check
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8080/health || curl -f http://localhost:8080/ || exit 1
+
+# Use entrypoint for runtime configuration
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+# Start nginx with optimized configuration
+CMD ["nginx", "-g", "daemon off;"]
+
+# ================================
+# DEVELOPMENT STAGE
+# ================================
+FROM build-deps as development
+
+# Install development tools
+RUN apk add --no-cache \
+    vim \
+    less \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy source code
+COPY . .
+
+# Set development environment
+ENV NODE_ENV=development \
+    VITE_API_URL=http://localhost:8000 \
+    VITE_WS_URL=ws://localhost:8000/ws \
+    VITE_ENVIRONMENT=development
+
+# Expose development port
+EXPOSE 4200
+
+# Development command with hot reload
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "4200"]
+
+# ================================
+# TESTING STAGE
+# ================================
+FROM development as testing
+
+# Copy test files
+COPY tests/ ./tests/
+COPY vitest.config.ts playwright.config.ts ./
+
+# Install test dependencies
+RUN npx playwright install --with-deps
+
+# Run tests
+CMD ["npm", "run", "test:ci"]

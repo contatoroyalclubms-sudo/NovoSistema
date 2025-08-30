@@ -1,0 +1,582 @@
+/* 🎨 DESIGN SYSTEM NEURAL FUTURISTA v3.0
+   Ultra-modern design system com cores neurais e efeitos holográficos
+   Criado para estar 10 anos à frente do mercado */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+
+/* ============================================================================
+   🌈 PALETA DE CORES NEURAL - Gradientes Futuristas
+   ============================================================================ */
+
+:root {
+  /* 🎨 Cores Primárias - Gradientes Neural */
+  --color-primary-start: #6366f1;
+  --color-primary-middle: #8b5cf6;
+  --color-primary-end: #ec4899;
+  --color-primary: linear-gradient(135deg, var(--color-primary-start), var(--color-primary-middle), var(--color-primary-end));
+  --color-primary-solid: #8b5cf6;
+
+  /* 🌊 Cores Secundárias - Tons Cibernéticos */
+  --color-secondary-start: #0ea5e9;
+  --color-secondary-middle: #06b6d4;
+  --color-secondary-end: #10b981;
+  --color-secondary: linear-gradient(135deg, var(--color-secondary-start), var(--color-secondary-middle), var(--color-secondary-end));
+  --color-secondary-solid: #06b6d4;
+
+  /* 🚦 Cores de Estado - Sistema Semafórico Inteligente */
+  --color-success: #10b981;
+  --color-success-light: #34d399;
+  --color-success-dark: #059669;
+  --color-warning: #f59e0b;
+  --color-warning-light: #fbbf24;
+  --color-warning-dark: #d97706;
+  --color-error: #ef4444;
+  --color-error-light: #f87171;
+  --color-error-dark: #dc2626;
+  --color-info: #3b82f6;
+  --color-info-light: #60a5fa;
+  --color-info-dark: #2563eb;
+
+  /* 🌃 Dark Mode Nativo - Tons Deep Space */
+  --color-dark-space: #0c0a1e;
+  --color-dark-void: #1a1625;
+  --color-dark-nebula: #2d1b69;
+  --color-dark-cosmic: #4c1d95;
+  
+  /* ✨ Acentos Holográficos - Iridescência */
+  --color-holographic: linear-gradient(45deg, #ff0080, #7928ca, #0099ff, #00ff80);
+  --color-iridescent: linear-gradient(90deg, #ff006e, #8338ec, #3a86ff, #06ffa5);
+  
+  /* 🔘 Neutros Adaptativos */
+  --color-white: #ffffff;
+  --color-gray-50: #f8fafc;
+  --color-gray-100: #f1f5f9;
+  --color-gray-200: #e2e8f0;
+  --color-gray-300: #cbd5e1;
+  --color-gray-400: #94a3b8;
+  --color-gray-500: #64748b;
+  --color-gray-600: #475569;
+  --color-gray-700: #334155;
+  --color-gray-800: #1e293b;
+  --color-gray-900: #0f172a;
+  --color-black: #000000;
+}
+
+/* 🌙 Dark Mode Variables */
+[data-theme="dark"] {
+  --background-primary: var(--color-dark-space);
+  --background-secondary: var(--color-dark-void);
+  --background-tertiary: var(--color-dark-nebula);
+  --text-primary: var(--color-gray-50);
+  --text-secondary: var(--color-gray-300);
+  --text-tertiary: var(--color-gray-500);
+  --border-primary: rgba(139, 92, 246, 0.2);
+  --border-secondary: rgba(139, 92, 246, 0.1);
+}
+
+/* ☀️ Light Mode Variables */
+[data-theme="light"] {
+  --background-primary: var(--color-white);
+  --background-secondary: var(--color-gray-50);
+  --background-tertiary: var(--color-gray-100);
+  --text-primary: var(--color-gray-900);
+  --text-secondary: var(--color-gray-700);
+  --text-tertiary: var(--color-gray-500);
+  --border-primary: var(--color-gray-200);
+  --border-secondary: var(--color-gray-100);
+}
+
+/* ============================================================================
+   ✨ EFEITOS VISUAIS AVANÇADOS - Glassmorphism 3.0
+   ============================================================================ */
+
+/* 🔮 Glassmorphism 3.0 - Blur Adaptativo */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+}
+
+.glass-dark {
+  background: rgba(12, 10, 30, 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+}
+
+/* 🎭 Neumorphism Seletivo para CTAs */
+.neomorphic {
+  background: linear-gradient(145deg, #f0f0f0, #cacaca);
+  box-shadow: 
+    20px 20px 60px #bebebe,
+    -20px -20px 60px #ffffff;
+  border-radius: 20px;
+}
+
+.neomorphic-dark {
+  background: linear-gradient(145deg, #2d1b69, #1a1625);
+  box-shadow: 
+    20px 20px 60px #0c0a1e,
+    -20px -20px 60px #4c1d95;
+}
+
+/* 🌈 Gradientes Neurais Animados */
+.gradient-neural {
+  background: var(--color-primary);
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease infinite;
+}
+
+.gradient-secondary {
+  background: var(--color-secondary);
+  background-size: 400% 400%;
+  animation: gradientShift 6s ease infinite;
+}
+
+.gradient-holographic {
+  background: var(--color-holographic);
+  background-size: 400% 400%;
+  animation: holographicShift 4s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes holographicShift {
+  0% { background-position: 0% 50%; }
+  25% { background-position: 100% 0%; }
+  50% { background-position: 100% 100%; }
+  75% { background-position: 0% 100%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 🎪 Sombras Multicamadas Realistas */
+.shadow-neural {
+  box-shadow: 
+    0 4px 6px -1px rgba(139, 92, 246, 0.1),
+    0 2px 4px -1px rgba(139, 92, 246, 0.06),
+    0 0 0 1px rgba(139, 92, 246, 0.05);
+}
+
+.shadow-holographic {
+  box-shadow: 
+    0 10px 25px rgba(255, 0, 128, 0.3),
+    0 5px 10px rgba(121, 40, 202, 0.2),
+    0 0 20px rgba(0, 153, 255, 0.1);
+}
+
+.shadow-cosmic {
+  box-shadow: 
+    0 20px 40px rgba(12, 10, 30, 0.4),
+    0 10px 20px rgba(26, 22, 37, 0.3),
+    0 5px 10px rgba(45, 27, 105, 0.2);
+}
+
+/* 🌟 Borders Holográficos */
+.border-holographic {
+  position: relative;
+  border: 2px solid transparent;
+  background: linear-gradient(var(--background-primary), var(--background-primary)) padding-box,
+              var(--color-holographic) border-box;
+  border-radius: 12px;
+}
+
+.border-neural {
+  border: 1px solid;
+  border-image: var(--color-primary) 1;
+  border-radius: 8px;
+}
+
+/* ============================================================================
+   📝 TIPOGRAFIA FUTURISTA - Hierarquia Inteligente
+   ============================================================================ */
+
+/* 🔤 Font Families */
+.font-primary {
+  font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-optical-sizing: auto;
+}
+
+.font-display {
+  font-family: 'Orbitron', monospace;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono Variable', 'Fira Code', Consolas, monospace;
+  font-feature-settings: 'liga', 'calt';
+}
+
+/* 🎯 Hierarquia Tipográfica Inteligente */
+.text-display-1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 900;
+  line-height: 1.1;
+  background: var(--color-primary);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.text-display-2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  background: var(--color-secondary);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.text-heading-1 {
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.text-heading-2 {
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.text-heading-3 {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.text-body-lg {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.text-body {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.text-body-sm {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.text-caption {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================================
+   🎨 UTILITY CLASSES MODERNAS - CSS Custom Properties
+   ============================================================================ */
+
+/* 📐 Spacing System Neural */
+.space-neural {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+}
+
+/* 🎭 Animation Utilities */
+.animate-glow {
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+  }
+  to {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.8), 0 0 40px rgba(139, 92, 246, 0.4);
+  }
+}
+
+.animate-pulse-neural {
+  animation: pulseNeural 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulseNeural {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+/* 🔄 Transform Utilities */
+.transform-gpu {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000;
+}
+
+.hover-lift {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(139, 92, 246, 0.2);
+}
+
+/* 🌈 State Classes */
+.state-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.state-loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* 🎪 Focus States Modernos */
+.focus-neural {
+  outline: none;
+  position: relative;
+}
+
+.focus-neural:focus {
+  box-shadow: 
+    0 0 0 3px rgba(139, 92, 246, 0.3),
+    0 0 20px rgba(139, 92, 246, 0.2);
+}
+
+.focus-neural:focus::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--color-primary-solid);
+  border-radius: inherit;
+  opacity: 0.8;
+}
+
+/* 🌟 Interactive States */
+.interactive {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.interactive:hover {
+  transform: translateY(-1px);
+}
+
+.interactive:active {
+  transform: translateY(0);
+  transition-duration: 0.1s;
+}
+
+/* ============================================================================
+   📱 RESPONSIVE UTILITIES - Mobile-First
+   ============================================================================ */
+
+/* 🔧 Container Queries Ready */
+@container (min-width: 320px) {
+  .container-xs { padding: var(--space-4); }
+}
+
+@container (min-width: 768px) {
+  .container-md { padding: var(--space-8); }
+}
+
+@container (min-width: 1024px) {
+  .container-lg { padding: var(--space-12); }
+}
+
+/* ♿ Accessibility Utilities */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.reduced-motion {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 🌙 High Contrast Mode */
+@media (prefers-contrast: high) {
+  .glass {
+    background: var(--background-primary);
+    border: 2px solid var(--text-primary);
+  }
+  
+  .gradient-neural {
+    background: var(--color-primary-solid);
+  }
+}
+
+/* ============================================================================
+   🎨 CSS RESET MODERNO - Baseline Otimizada
+   ============================================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  line-height: 1.15;
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
+}
+
+body {
+  font-family: var(--font-primary);
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--background-primary);
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ============================================================================
+   🚀 PERFORMANCE OPTIMIZATIONS
+   ============================================================================ */
+
+/* GPU Acceleration para elementos animados */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Otimização de scroll */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  overflow-scrolling: touch;
+}
+
+/* Carregamento de fontes otimizado */
+@font-face {
+  font-family: 'Inter Variable';
+  font-display: swap;
+  font-weight: 100 900;
+}
+
+/* ============================================================================
+   🎯 DEBUG UTILITIES - Desenvolvimento
+   ============================================================================ */
+
+.debug-grid {
+  background-image: 
+    linear-gradient(rgba(139, 92, 246, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.debug-outline * {
+  outline: 1px solid rgba(255, 0, 128, 0.3);
+}
+
+/* ============================================================================
+   🎨 DESIGN SYSTEM COMPLETO - NEURAL FUTURISTA v3.0
+   Criado para proporcionar experiências 10 anos à frente do mercado
+   ============================================================================ */
