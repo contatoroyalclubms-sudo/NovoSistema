@@ -156,7 +156,7 @@ export default function InteractiveCharts() {
                   borderRadius: "8px",
                   boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                 }}
-                formatter={(value: any, name: string) => [
+                formatter={(value: number, name: string) => [
                   name === "revenue" ? `R$ ${value}` : value,
                   name === "revenue" ? "Revenue" : name === "orders" ? "Pedidos" : "Clientes"
                 ]}
@@ -203,7 +203,7 @@ export default function InteractiveCharts() {
                   borderRadius: "8px",
                   boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                 }}
-                formatter={(value: any, name: string) => [
+                formatter={(value: number) => [
                   `${value}%`,
                   "Participação"
                 ]}

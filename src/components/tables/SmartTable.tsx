@@ -12,10 +12,8 @@ import {
   MoreHorizontal,
   TrendingUp,
   TrendingDown,
-  Star,
   Eye,
-  Edit,
-  Trash2
+  Edit
 } from "lucide-react"
 
 const customersData = [
@@ -134,6 +132,11 @@ const productsData = [
   }
 ]
 
+interface TableItem {
+  id: number
+  [key: string]: string | number | Date
+}
+
 interface Column {
   key: string
   label: string
@@ -144,7 +147,7 @@ interface Column {
 
 interface SmartTableProps {
   title: string
-  data: any[]
+  data: TableItem[]
   columns: Column[]
   searchable?: boolean
   exportable?: boolean
@@ -154,7 +157,7 @@ interface SmartTableProps {
 function SmartTable({ title, data, columns, searchable = true, exportable = true, className = "" }: SmartTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null)
-  const [filterConfig, setFilterConfig] = useState<Record<string, string>>({})
+  const [filterConfig] = useState<Record<string, string>>({})
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
 
@@ -212,12 +215,12 @@ function SmartTable({ title, data, columns, searchable = true, exportable = true
     alert(`Exportando ${title} como ${format.toUpperCase()}...`)
   }
 
-  const renderCellContent = (item: any, column: Column) => {
+  const renderCellContent = (item: TableItem, column: Column) => {
     const value = item[column.key]
 
     switch (column.type) {
       case "currency":
-        return `R$ ${value?.toFixed(2)}`
+        return `R$ ${typeof value === 'number' ? value.toFixed(2) : '0.00'}`
       case "status":
         const statusColors = {
           VIP: "bg-purple-100 text-purple-800",
@@ -226,7 +229,7 @@ function SmartTable({ title, data, columns, searchable = true, exportable = true
         }
         return (
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[value as keyof typeof statusColors] || "bg-gray-100 text-gray-800"}`}>
-            {value}
+            {String(value)}
           </span>
         )
       case "trend":
@@ -236,7 +239,7 @@ function SmartTable({ title, data, columns, searchable = true, exportable = true
           <TrendingDown className="h-4 w-4 text-red-600" />
         )
       default:
-        return value
+        return String(value)
     }
   }
 

@@ -7,12 +7,7 @@ import {
   X, 
   CheckCircle, 
   AlertTriangle, 
-  Info, 
-  TrendingUp,
-  Users,
-  DollarSign,
-  Activity,
-  Settings
+  Info
 } from "lucide-react"
 
 interface Notification {
@@ -261,7 +256,7 @@ function NotificationCenter({ isOpen, onClose }: { isOpen: boolean; onClose: () 
               {["all", "unread", "ai"].map((filterType) => (
                 <button
                   key={filterType}
-                  onClick={() => setFilter(filterType as any)}
+                  onClick={() => setFilter(filterType as "all" | "unread" | "ai")}
                   className={`px-3 py-1 rounded-full text-sm transition-colors ${
                     filter === filterType
                       ? "bg-blue-600 text-white"
@@ -373,7 +368,7 @@ export default function NotificationSystem() {
       if (Math.random() > 0.7) {
         const newNotification: Notification = {
           id: Date.now().toString(),
-          type: ["success", "warning", "info"][Math.floor(Math.random() * 3)] as any,
+          type: (["success", "warning", "info"] as const)[Math.floor(Math.random() * 3)],
           title: "Nova atualização em tempo real",
           description: "Sistema detectou mudança nos dados",
           timestamp: new Date(),
