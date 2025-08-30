@@ -1,655 +1,944 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Numeric, Enum, Date
+"""
+Modelos de dados para o Sistema Universal de Gestão de Eventos
+Desenvolvido para ser escalável, performático e modular
+"""
+
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, Numeric, Enum, JSON, Index
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from .database import Base
-import enum
+from datetime import datetime
+from enum import Enum as PyEnum
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
-class StatusEvento(enum.Enum):
+Base = declarative_base()
+
+# Enums para tipos de dados estruturados
+class StatusUsuario(PyEnum):
     ATIVO = "ativo"
     INATIVO = "inativo"
+    PENDENTE = "pendente"
+    BLOQUEADO = "bloqueado"
+
+class StatusEvento(PyEnum):
+    PLANEJAMENTO = "planejamento"
+    ATIVO = "ativo"
+    PAUSADO = "pausado"
+    FINALIZADO = "finalizado"
     CANCELADO = "cancelado"
 
-class TipoLista(enum.Enum):
-    VIP = "vip"
-    FREE = "free"
-    PAGANTE = "pagante"
-    PROMOTER = "promoter"
+class TipoEvento(PyEnum):
+    FESTA = "festa"
+    SHOW = "show"
+    CONFERENCIA = "conferencia"
+    WORKSHOP = "workshop"
+    NETWORKING = "networking"
+    CORPORATIVO = "corporativo"
+    CASAMENTO = "casamento"
     ANIVERSARIO = "aniversario"
-    DESCONTO = "desconto"
+    OUTRO = "outro"
 
-class StatusTransacao(enum.Enum):
+class StatusParticipante(PyEnum):
+    CONFIRMADO = "confirmado"
+    PRESENTE = "presente"
+    AUSENTE = "ausente"
+    CANCELADO = "cancelado"
+
+class TipoPagamento(PyEnum):
+    DINHEIRO = "dinheiro"
+    PIX = "pix"
+    CARTAO_CREDITO = "cartao_credito"
+    CARTAO_DEBITO = "cartao_debito"
+    TRANSFERENCIA = "transferencia"
+
+class StatusTransacao(PyEnum):
     PENDENTE = "pendente"
     APROVADA = "aprovada"
+    REJEITADA = "rejeitada"
     CANCELADA = "cancelada"
+    ESTORNADA = "estornada"
 
-class TipoUsuario(enum.Enum):
+class TipoUsuario(PyEnum):
     ADMIN = "admin"
-    PROMOTER = "promoter"
-    CLIENTE = "cliente"
+    ORGANIZADOR = "organizador"
+    OPERADOR = "operador"
+    PARTICIPANTE = "participante"
 
-class Empresa(Base):
-    __tablename__ = "empresas"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(255), nullable=False)
-    cnpj = Column(String(18), unique=True, nullable=False)
-    email = Column(String(255), nullable=False)
-    telefone = Column(String(20))
-    endereco = Column(Text)
-    ativa = Column(Boolean, default=True)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    usuarios = relationship("Usuario", back_populates="empresa")
-    eventos = relationship("Evento", back_populates="empresa")
+# ================================
+# MODELOS PRINCIPAIS
+# ================================
 
 class Usuario(Base):
+    """Modelo para usuários do sistema"""
     __tablename__ = "usuarios"
     
-    id = Column(Integer, primary_key=True, index=True)
-    cpf = Column(String(14), unique=True, nullable=False, index=True)
-    nome = Column(String(255), nullable=False)
-    email = Column(String(255), unique=True, nullable=False)
-    telefone = Column(String(20))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nome = Column(String(100), nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    telefone = Column(String(20), nullable=True)
     senha_hash = Column(String(255), nullable=False)
-    tipo = Column(Enum(TipoUsuario), nullable=False)
+    tipo_usuario = Column(Enum(TipoUsuario), default=TipoUsuario.PARTICIPANTE)
     ativo = Column(Boolean, default=True)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    ultimo_login = Column(DateTime(timezone=True))
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    foto_perfil = Column(String(500), nullable=True)
+    bio = Column(Text, nullable=True)
+    data_nascimento = Column(DateTime, nullable=True)
+    cpf = Column(String(14), nullable=True, unique=True)
+    empresa_id = Column(UUID(as_uuid=True), nullable=True)  # ID da empresa/organização
+    endereco = Column(JSON, nullable=True)  # {rua, cidade, cep, estado}
+    configuracoes = Column(JSON, nullable=True)  # Preferências do usuário
+    ultimo_login = Column(DateTime, nullable=True)
+    token_reset_senha = Column(String(255), nullable=True)
+    token_verificacao = Column(String(255), nullable=True)
+    email_verificado = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
-    empresa = relationship("Empresa", back_populates="usuarios")
-    eventos_criados = relationship("Evento", back_populates="criador")
-    promocoes = relationship("PromoterEvento", back_populates="promoter")
+    # Relacionamentos
+    eventos_organizados = relationship("Evento", back_populates="organizador")
+    participacoes = relationship("Participante", back_populates="usuario")
     transacoes = relationship("Transacao", back_populates="usuario")
-    checkins = relationship("Checkin", back_populates="usuario")
+    movimentos_estoque = relationship("MovimentoEstoque", back_populates="usuario")
+    vendas_pdv = relationship("VendaPDV", back_populates="vendedor")
+    conquistas_promoter = relationship("PromoterConquista", back_populates="usuario")
+    ranking_gamificacao = relationship("RankingGamificacao", back_populates="usuario")
+    
+    # Índices para performance
+    __table_args__ = (
+        Index('idx_usuario_email', 'email'),
+        Index('idx_usuario_tipo', 'tipo_usuario'),
+        Index('idx_usuario_ativo', 'ativo'),
+    )
 
 class Evento(Base):
+    """Modelo principal para eventos"""
     __tablename__ = "eventos"
     
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(255), nullable=False)
-    descricao = Column(Text)
-    data_evento = Column(DateTime(timezone=True), nullable=False)
-    local = Column(String(255), nullable=False)
-    endereco = Column(Text)
-    limite_idade = Column(Integer, default=18)
-    capacidade_maxima = Column(Integer)
-    status = Column(Enum(StatusEvento), default=StatusEvento.ATIVO)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    criador_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nome = Column(String(200), nullable=False)
+    descricao = Column(Text, nullable=True)
+    tipo_evento = Column(Enum(TipoEvento), nullable=False)
+    status = Column(Enum(StatusEvento), default=StatusEvento.PLANEJAMENTO)
     
-    empresa = relationship("Empresa", back_populates="eventos")
-    criador = relationship("Usuario", back_populates="eventos_criados")
-    listas = relationship("Lista", back_populates="evento")
-    promoters = relationship("PromoterEvento", back_populates="evento")
+    # Dados temporais
+    data_inicio = Column(DateTime, nullable=False)
+    data_fim = Column(DateTime, nullable=False)
+    data_inicio_checkin = Column(DateTime, nullable=True)
+    data_fim_checkin = Column(DateTime, nullable=True)
+    
+    # Localização
+    local_nome = Column(String(200), nullable=False)
+    local_endereco = Column(String(500), nullable=False)
+    local_coordenadas = Column(JSON, nullable=True)  # {lat, lng}
+    capacidade_maxima = Column(Integer, nullable=True)
+    
+    # Configurações visuais e de branding
+    cor_primaria = Column(String(7), default="#0EA5E9")  # Hex color
+    cor_secundaria = Column(String(7), default="#64748B")
+    logo_url = Column(String(500), nullable=True)
+    banner_url = Column(String(500), nullable=True)
+    template_layout = Column(String(50), default="default")
+    
+    # Configurações funcionais
+    permite_checkin_antecipado = Column(Boolean, default=False)
+    requer_confirmacao = Column(Boolean, default=True)
+    limite_participantes = Column(Integer, nullable=True)
+    valor_entrada = Column(Numeric(10, 2), default=0.00)
+    moeda = Column(String(3), default="BRL")
+    
+    # Configurações de gamificação
+    sistema_pontuacao_ativo = Column(Boolean, default=False)
+    pontos_checkin = Column(Integer, default=10)
+    pontos_participacao = Column(Integer, default=5)
+    
+    # QR Code único do evento
+    qr_code_checkin = Column(String(500), nullable=True)
+    qr_code_data = Column(JSON, nullable=True)
+    
+    # Dados organizacionais
+    organizador_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    equipe_organizacao = Column(JSON, nullable=True)  # Lista de IDs da equipe
+    
+    # Configurações de notificação
+    webhook_checkin = Column(String(500), nullable=True)
+    email_confirmacao_template = Column(Text, nullable=True)
+    
+    # Metadados
+    tags = Column(JSON, nullable=True)  # Lista de tags
+    configuracoes_extras = Column(JSON, nullable=True)
+    notas_internas = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    organizador = relationship("Usuario", back_populates="eventos_organizados")
+    participantes = relationship("Participante", back_populates="evento", cascade="all, delete-orphan")
+    produtos = relationship("Produto", back_populates="evento", cascade="all, delete-orphan")
     transacoes = relationship("Transacao", back_populates="evento")
-    checkins = relationship("Checkin", back_populates="evento")
-
-class Lista(Base):
-    __tablename__ = "listas"
+    pontuacoes = relationship("Pontuacao", back_populates="evento")
+    vendas_pdv = relationship("VendaPDV", back_populates="evento")
     
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(255), nullable=False)
-    tipo = Column(Enum(TipoLista), nullable=False)
-    preco = Column(Numeric(10, 2), default=0)
-    limite_vendas = Column(Integer)
-    vendas_realizadas = Column(Integer, default=0)
-    ativa = Column(Boolean, default=True)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"))
-    descricao = Column(Text)
-    codigo_cupom = Column(String(50))
-    desconto_percentual = Column(Numeric(5, 2), default=0)
+    # Índices para performance
+    __table_args__ = (
+        Index('idx_evento_status', 'status'),
+        Index('idx_evento_data_inicio', 'data_inicio'),
+        Index('idx_evento_organizador', 'organizador_id'),
+        Index('idx_evento_tipo', 'tipo_evento'),
+    )
+
+class Participante(Base):
+    """Modelo para participantes de eventos"""
+    __tablename__ = "participantes"
     
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"), nullable=False)
     
-    evento = relationship("Evento", back_populates="listas")
-    promoter = relationship("Usuario")
-    transacoes = relationship("Transacao", back_populates="lista")
-
-class PromoterEvento(Base):
-    __tablename__ = "promoter_eventos"
+    # Status e dados de participação
+    status = Column(Enum(StatusParticipante), default=StatusParticipante.CONFIRMADO)
+    data_inscricao = Column(DateTime, default=func.now())
+    data_checkin = Column(DateTime, nullable=True)
+    data_checkout = Column(DateTime, nullable=True)
     
-    id = Column(Integer, primary_key=True, index=True)
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    meta_vendas = Column(Integer, default=0)
-    vendas_realizadas = Column(Integer, default=0)
-    comissao_percentual = Column(Numeric(5, 2), default=0)
-    ativo = Column(Boolean, default=True)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    # QR Code individual
+    qr_code_individual = Column(String(500), nullable=True)
+    qr_code_data = Column(JSON, nullable=True)
     
-    promoter = relationship("Usuario", back_populates="promocoes")
-    evento = relationship("Evento", back_populates="promoters")
-
-class Transacao(Base):
-    __tablename__ = "transacoes"
+    # Dados de pagamento
+    valor_pago = Column(Numeric(10, 2), default=0.00)
+    forma_pagamento = Column(Enum(TipoPagamento), nullable=True)
+    data_pagamento = Column(DateTime, nullable=True)
+    comprovante_pagamento = Column(String(500), nullable=True)
     
-    id = Column(Integer, primary_key=True, index=True)
-    cpf_comprador = Column(String(14), nullable=False, index=True)
-    nome_comprador = Column(String(255), nullable=False)
-    email_comprador = Column(String(255))
-    telefone_comprador = Column(String(20))
-    valor = Column(Numeric(10, 2), nullable=False)
-    status = Column(Enum(StatusTransacao), default=StatusTransacao.PENDENTE)
-    metodo_pagamento = Column(String(50))
-    codigo_transacao = Column(String(100), unique=True)
-    qr_code_ticket = Column(String(100), unique=True)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    lista_id = Column(Integer, ForeignKey("listas.id"), nullable=False)
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"))
-    ip_origem = Column(String(45))
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    # Dados personalizados
+    dados_adicionais = Column(JSON, nullable=True)  # Campos customizados do evento
+    preferencias_alimentares = Column(String(500), nullable=True)
+    necessidades_especiais = Column(String(500), nullable=True)
     
-    evento = relationship("Evento", back_populates="transacoes")
-    lista = relationship("Lista", back_populates="transacoes")
-    usuario = relationship("Usuario", back_populates="transacoes")
-
-class Checkin(Base):
-    __tablename__ = "checkins"
+    # Gamificação
+    pontos_obtidos = Column(Integer, default=0)
+    badges_conquistadas = Column(JSON, nullable=True)  # Lista de badges
     
-    id = Column(Integer, primary_key=True, index=True)
-    cpf = Column(String(14), nullable=False, index=True)
-    nome = Column(String(255), nullable=False)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"))
-    transacao_id = Column(Integer, ForeignKey("transacoes.id"))
-    metodo_checkin = Column(String(20))  # cpf, qr_code, cartao
-    validacao_cpf = Column(String(3))  # 3 primeiros dígitos para validação
-    ip_origem = Column(String(45))
-    checkin_em = Column(DateTime(timezone=True), server_default=func.now())
+    # Controle de presença detalhado
+    tempo_permanencia = Column(Integer, nullable=True)  # Em minutos
+    areas_visitadas = Column(JSON, nullable=True)  # Lista de áreas do evento
     
-    evento = relationship("Evento", back_populates="checkins")
-    usuario = relationship("Usuario", back_populates="checkins")
-    transacao = relationship("Transacao")
+    # Avaliação do evento
+    avaliacao_evento = Column(Integer, nullable=True)  # 1-5 estrelas
+    comentario_evento = Column(Text, nullable=True)
+    data_avaliacao = Column(DateTime, nullable=True)
+    
+    # Metadados
+    observacoes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    usuario = relationship("Usuario", back_populates="participacoes")
+    evento = relationship("Evento", back_populates="participantes")
+    transacoes = relationship("Transacao", back_populates="participante")
+    
+    # Índices para performance
+    __table_args__ = (
+        Index('idx_participante_evento', 'evento_id'),
+        Index('idx_participante_usuario', 'usuario_id'),
+        Index('idx_participante_status', 'status'),
+        Index('idx_participante_checkin', 'data_checkin'),
+        # Índice único para evitar participação duplicada
+        Index('idx_participante_unico', 'usuario_id', 'evento_id', unique=True),
+    )
 
-class TipoProduto(enum.Enum):
-    BEBIDA = "BEBIDA"
-    COMIDA = "COMIDA"
-    INGRESSO = "INGRESSO"
-    FICHA = "FICHA"
-    COMBO = "COMBO"
-    VOUCHER = "VOUCHER"
-
-class StatusProduto(enum.Enum):
-    ATIVO = "ATIVO"
-    INATIVO = "INATIVO"
-    ESGOTADO = "ESGOTADO"
-
-class TipoComanda(enum.Enum):
-    FISICA = "FISICA"
-    VIRTUAL = "VIRTUAL"
-    RFID = "RFID"
-    NFC = "NFC"
-
-class StatusComanda(enum.Enum):
-    ATIVA = "ATIVA"
-    BLOQUEADA = "BLOQUEADA"
-    CANCELADA = "CANCELADA"
-
-class StatusVendaPDV(enum.Enum):
-    PENDENTE = "PENDENTE"
-    APROVADA = "APROVADA"
-    CANCELADA = "CANCELADA"
-    ESTORNADA = "ESTORNADA"
-
-class TipoPagamentoPDV(enum.Enum):
-    PIX = "PIX"
-    CARTAO_CREDITO = "CARTAO_CREDITO"
-    CARTAO_DEBITO = "CARTAO_DEBITO"
-    DINHEIRO = "DINHEIRO"
-    SALDO_COMANDA = "SALDO_COMANDA"
-    VOUCHER = "VOUCHER"
-    SPLIT = "SPLIT"
+# ================================
+# SISTEMA PDV E FINANCEIRO
+# ================================
 
 class Produto(Base):
+    """Produtos disponíveis no PDV do evento"""
     __tablename__ = "produtos"
     
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(255), nullable=False)
-    descricao = Column(Text)
-    tipo = Column(Enum(TipoProduto), nullable=False)
-    preco = Column(Numeric(10, 2), nullable=False)
-    codigo_barras = Column(String(50), unique=True)
-    codigo_interno = Column(String(20), unique=True)
-    estoque_atual = Column(Integer, default=0)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"), nullable=False)
+    empresa_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.empresa_id"), nullable=False)
+    categoria_id = Column(UUID(as_uuid=True), ForeignKey("categorias.id"), nullable=True)
+    
+    # Dados básicos do produto
+    nome = Column(String(100), nullable=False)
+    descricao = Column(Text, nullable=True)
+    codigo = Column(String(50), nullable=True, unique=True)  # Código interno
+    codigo_barras = Column(String(50), nullable=True, unique=True)
+    sku = Column(String(50), nullable=True)
+    
+    # Preços e custos
+    preco_venda = Column(Numeric(10, 2), nullable=False)
+    preco_custo = Column(Numeric(10, 2), nullable=True)
+    margem_lucro = Column(Numeric(5, 2), nullable=True)  # Percentual
+    
+    # Controle de estoque
+    quantidade_estoque = Column(Integer, default=0)  # Nome padrão do sistema
+    estoque_inicial = Column(Integer, default=0)
     estoque_minimo = Column(Integer, default=0)
-    estoque_maximo = Column(Integer, default=1000)
-    controla_estoque = Column(Boolean, default=True)
-    status = Column(Enum(StatusProduto), default=StatusProduto.ATIVO)
-    categoria = Column(String(100))
-    imagem_url = Column(String(500))
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    estoque_maximo = Column(Integer, nullable=True)
+    permite_venda_sem_estoque = Column(Boolean, default=False)
     
-    evento = relationship("Evento")
-    empresa = relationship("Empresa")
-    itens_venda = relationship("ItemVendaPDV", back_populates="produto")
+    # Configurações
+    ativo = Column(Boolean, default=True)
+    destaque = Column(Boolean, default=False)
+    permite_desconto = Column(Boolean, default=True)
+    requer_idade_minima = Column(Integer, nullable=True)
+    
+    # Mídia
+    imagem_url = Column(String(500), nullable=True)
+    imagens_extras = Column(JSON, nullable=True)  # URLs adicionais
+    
+    # Metadados
+    tags = Column(JSON, nullable=True)
+    configuracoes = Column(JSON, nullable=True)
+    atualizado_em = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    evento = relationship("Evento", back_populates="produtos")
+    categoria_rel = relationship("Categoria", back_populates="produtos")
+    itens_transacao = relationship("ItemTransacao", back_populates="produto")
     movimentos_estoque = relationship("MovimentoEstoque", back_populates="produto")
+    itens_venda_pdv = relationship("ItemVendaPDV", back_populates="produto")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_produto_evento', 'evento_id'),
+        Index('idx_produto_ativo', 'ativo'),
+        Index('idx_produto_categoria', 'categoria_id'),
+    )
 
-class Comanda(Base):
-    __tablename__ = "comandas"
+class Transacao(Base):
+    """Transações financeiras do sistema"""
+    __tablename__ = "transacoes"
     
-    id = Column(Integer, primary_key=True, index=True)
-    numero_comanda = Column(String(20), unique=True, nullable=False)
-    cpf_cliente = Column(String(14), index=True)
-    nome_cliente = Column(String(255))
-    tipo = Column(Enum(TipoComanda), nullable=False)
-    codigo_rfid = Column(String(50), unique=True)
-    qr_code = Column(String(100), unique=True)
-    saldo_atual = Column(Numeric(10, 2), default=0)
-    saldo_bloqueado = Column(Numeric(10, 2), default=0)
-    status = Column(Enum(StatusComanda), default=StatusComanda.ATIVA)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"), nullable=False)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    participante_id = Column(UUID(as_uuid=True), ForeignKey("participantes.id"), nullable=True)
     
-    evento = relationship("Evento")
-    empresa = relationship("Empresa")
-    vendas = relationship("VendaPDV", back_populates="comanda")
-    recargas = relationship("RecargaComanda", back_populates="comanda")
+    # Dados da transação
+    numero_transacao = Column(String(50), unique=True, nullable=False)
+    tipo_transacao = Column(String(20), nullable=False)  # venda, entrada, desconto, etc
+    status = Column(Enum(StatusTransacao), default=StatusTransacao.PENDENTE)
+    
+    # Valores
+    valor_bruto = Column(Numeric(10, 2), nullable=False)
+    valor_desconto = Column(Numeric(10, 2), default=0.00)
+    valor_taxa = Column(Numeric(10, 2), default=0.00)
+    valor_liquido = Column(Numeric(10, 2), nullable=False)
+    moeda = Column(String(3), default="BRL")
+    
+    # Pagamento
+    forma_pagamento = Column(Enum(TipoPagamento), nullable=False)
+    parcelas = Column(Integer, default=1)
+    valor_parcela = Column(Numeric(10, 2), nullable=True)
+    
+    # Dados do pagamento externo
+    gateway_transacao_id = Column(String(100), nullable=True)
+    gateway_resposta = Column(JSON, nullable=True)
+    comprovante_url = Column(String(500), nullable=True)
+    
+    # Timestamps
+    data_transacao = Column(DateTime, default=func.now())
+    data_processamento = Column(DateTime, nullable=True)
+    data_confirmacao = Column(DateTime, nullable=True)
+    data_cancelamento = Column(DateTime, nullable=True)
+    
+    # Dados adicionais
+    observacoes = Column(Text, nullable=True)
+    metadados = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    evento = relationship("Evento", back_populates="transacoes")
+    usuario = relationship("Usuario", back_populates="transacoes")
+    participante = relationship("Participante", back_populates="transacoes")
+    itens = relationship("ItemTransacao", back_populates="transacao", cascade="all, delete-orphan")
+    movimentos_estoque = relationship("MovimentoEstoque", back_populates="venda")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_transacao_evento', 'evento_id'),
+        Index('idx_transacao_usuario', 'usuario_id'),
+        Index('idx_transacao_status', 'status'),
+        Index('idx_transacao_data', 'data_transacao'),
+        Index('idx_transacao_numero', 'numero_transacao'),
+    )
 
-class VendaPDV(Base):
-    __tablename__ = "vendas_pdv"
+class ItemTransacao(Base):
+    """Itens individuais de uma transação"""
+    __tablename__ = "itens_transacao"
     
-    id = Column(Integer, primary_key=True, index=True)
-    numero_venda = Column(String(20), unique=True, nullable=False)
-    cpf_cliente = Column(String(14), index=True)
-    nome_cliente = Column(String(255))
-    valor_total = Column(Numeric(10, 2), nullable=False)
-    valor_desconto = Column(Numeric(10, 2), default=0)
-    valor_final = Column(Numeric(10, 2), nullable=False)
-    tipo_pagamento = Column(Enum(TipoPagamentoPDV), nullable=False)
-    status = Column(Enum(StatusVendaPDV), default=StatusVendaPDV.PENDENTE)
-    comanda_id = Column(Integer, ForeignKey("comandas.id"))
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    usuario_vendedor_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"))
-    cupom_codigo = Column(String(50))
-    observacoes = Column(Text)
-    ip_origem = Column(String(45))
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transacao_id = Column(UUID(as_uuid=True), ForeignKey("transacoes.id"), nullable=False)
+    produto_id = Column(UUID(as_uuid=True), ForeignKey("produtos.id"), nullable=False)
     
-    comanda = relationship("Comanda", back_populates="vendas")
-    evento = relationship("Evento")
-    empresa = relationship("Empresa")
-    vendedor = relationship("Usuario", foreign_keys=[usuario_vendedor_id])
-    promoter = relationship("Usuario", foreign_keys=[promoter_id])
-    itens = relationship("ItemVendaPDV", back_populates="venda")
-    pagamentos = relationship("PagamentoPDV", back_populates="venda")
-
-class ItemVendaPDV(Base):
-    __tablename__ = "itens_venda_pdv"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    venda_id = Column(Integer, ForeignKey("vendas_pdv.id"), nullable=False)
-    produto_id = Column(Integer, ForeignKey("produtos.id"), nullable=False)
-    quantidade = Column(Integer, nullable=False)
+    # Dados do item
+    quantidade = Column(Integer, nullable=False, default=1)
     preco_unitario = Column(Numeric(10, 2), nullable=False)
+    desconto_unitario = Column(Numeric(10, 2), default=0.00)
     preco_total = Column(Numeric(10, 2), nullable=False)
-    desconto_aplicado = Column(Numeric(10, 2), default=0)
-    observacoes = Column(Text)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
     
-    venda = relationship("VendaPDV", back_populates="itens")
-    produto = relationship("Produto", back_populates="itens_venda")
+    # Metadados
+    observacoes = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    
+    # Relacionamentos
+    transacao = relationship("Transacao", back_populates="itens")
+    produto = relationship("Produto", back_populates="itens_transacao")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_item_transacao', 'transacao_id'),
+        Index('idx_item_produto', 'produto_id'),
+    )
 
-class PagamentoPDV(Base):
-    __tablename__ = "pagamentos_pdv"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    venda_id = Column(Integer, ForeignKey("vendas_pdv.id"), nullable=False)
-    tipo_pagamento = Column(Enum(TipoPagamentoPDV), nullable=False)
-    valor = Column(Numeric(10, 2), nullable=False)
-    codigo_transacao = Column(String(100))
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"))
-    comissao_percentual = Column(Numeric(5, 2), default=0)
-    valor_comissao = Column(Numeric(10, 2), default=0)
-    status = Column(String(20), default="APROVADA")
-    detalhes = Column(Text)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    
-    venda = relationship("VendaPDV", back_populates="pagamentos")
-    promoter = relationship("Usuario")
+# ================================
+# SISTEMA DE GAMIFICAÇÃO
+# ================================
 
-class RecargaComanda(Base):
-    __tablename__ = "recargas_comanda"
+class Pontuacao(Base):
+    """Sistema de pontuação e gamificação"""
+    __tablename__ = "pontuacoes"
     
-    id = Column(Integer, primary_key=True, index=True)
-    comanda_id = Column(Integer, ForeignKey("comandas.id"), nullable=False)
-    valor = Column(Numeric(10, 2), nullable=False)
-    tipo_pagamento = Column(Enum(TipoPagamentoPDV), nullable=False)
-    codigo_transacao = Column(String(100))
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    status = Column(String(20), default="APROVADA")
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"), nullable=False)
     
-    comanda = relationship("Comanda", back_populates="recargas")
-    usuario = relationship("Usuario")
+    # Pontuação
+    pontos_checkin = Column(Integer, default=0)
+    pontos_participacao = Column(Integer, default=0)
+    pontos_compras = Column(Integer, default=0)
+    pontos_bonus = Column(Integer, default=0)
+    pontos_total = Column(Integer, default=0)
+    
+    # Ranking
+    posicao_ranking = Column(Integer, nullable=True)
+    categoria_ranking = Column(String(20), nullable=True)  # bronze, prata, ouro, etc
+    
+    # Conquistas
+    conquistas_desbloqueadas = Column(JSON, nullable=True)
+    data_ultima_conquista = Column(DateTime, nullable=True)
+    
+    # Metadados
+    historico_pontos = Column(JSON, nullable=True)  # Log de pontuações
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    evento = relationship("Evento", back_populates="pontuacoes")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_pontuacao_evento', 'evento_id'),
+        Index('idx_pontuacao_usuario', 'usuario_id'),
+        Index('idx_pontuacao_total', 'pontos_total'),
+        Index('idx_pontuacao_unica', 'usuario_id', 'evento_id', unique=True),
+    )
+
+class Conquista(Base):
+    """Conquistas disponíveis no sistema"""
+    __tablename__ = "conquistas"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Dados da conquista
+    nome = Column(String(100), nullable=False)
+    descricao = Column(Text, nullable=False)
+    categoria = Column(String(50), nullable=False)  # checkin, compras, social, etc
+    dificuldade = Column(String(20), default="normal")  # facil, normal, dificil, lendario
+    
+    # Critérios
+    criterios = Column(JSON, nullable=False)  # Condições para desbloquear
+    pontos_recompensa = Column(Integer, default=0)
+    
+    # Visual
+    icone_url = Column(String(500), nullable=True)
+    cor = Column(String(7), default="#FFD700")
+    
+    # Configurações
+    ativa = Column(Boolean, default=True)
+    global_conquista = Column(Boolean, default=False)  # Disponível em todos os eventos
+    
+    # Metadados
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+# ================================
+# SISTEMA DE AUDITORIA E LOGS
+# ================================
+
+class LogAuditoria(Base):
+    """Log de auditoria para rastreamento de ações"""
+    __tablename__ = "logs_auditoria"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Dados da ação
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"), nullable=True)
+    acao = Column(String(50), nullable=False)  # CREATE, UPDATE, DELETE, LOGIN, etc
+    entidade = Column(String(50), nullable=False)  # usuario, evento, participante, etc
+    entidade_id = Column(String(100), nullable=True)
+    
+    # Detalhes
+    descricao = Column(Text, nullable=True)
+    dados_anteriores = Column(JSON, nullable=True)
+    dados_novos = Column(JSON, nullable=True)
+    
+    # Contexto técnico
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    dispositivo = Column(String(100), nullable=True)
+    
+    # Timestamp
+    timestamp = Column(DateTime, default=func.now())
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_auditoria_usuario', 'usuario_id'),
+        Index('idx_auditoria_evento', 'evento_id'),
+        Index('idx_auditoria_acao', 'acao'),
+        Index('idx_auditoria_timestamp', 'timestamp'),
+    )
+
+# ================================
+# CONFIGURAÇÕES E METADADOS
+# ================================
+
+class ConfiguracaoSistema(Base):
+    """Configurações globais do sistema"""
+    __tablename__ = "configuracoes_sistema"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    chave = Column(String(100), unique=True, nullable=False)
+    valor = Column(JSON, nullable=False)
+    descricao = Column(Text, nullable=True)
+    categoria = Column(String(50), nullable=True)
+    ativo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_config_chave', 'chave'),
+        Index('idx_config_categoria', 'categoria'),
+    )
+
+# ================================
+# VIEWS PARA RELATÓRIOS
+# ================================
+
+# ================================
+# SISTEMA DE ESTOQUE COMPLEMENTAR
+# ================================
+
+class Categoria(Base):
+    """Categorias para organização de produtos"""
+    __tablename__ = "categorias"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    empresa_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.empresa_id"), nullable=False)
+    
+    # Dados básicos
+    nome = Column(String(100), nullable=False)
+    descricao = Column(Text, nullable=True)
+    cor = Column(String(7), default="#007bff")  # Cor hex para UI
+    icone = Column(String(50), nullable=True)  # Nome do ícone
+    
+    # Configurações
+    ativa = Column(Boolean, default=True)
+    ordem = Column(Integer, default=0)  # Para ordenação customizada
+    
+    # Metadados
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    produtos = relationship("Produto", back_populates="categoria_rel")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_categoria_empresa', 'empresa_id'),
+        Index('idx_categoria_ativa', 'ativa'),
+    )
 
 class MovimentoEstoque(Base):
+    """Histórico de movimentações de estoque"""
     __tablename__ = "movimentos_estoque"
     
-    id = Column(Integer, primary_key=True, index=True)
-    produto_id = Column(Integer, ForeignKey("produtos.id"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    produto_id = Column(UUID(as_uuid=True), ForeignKey("produtos.id"), nullable=False)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    venda_id = Column(UUID(as_uuid=True), ForeignKey("transacoes.id"), nullable=True)
+    
+    # Dados do movimento
     tipo_movimento = Column(String(20), nullable=False)  # entrada, saida, ajuste
     quantidade = Column(Integer, nullable=False)
     estoque_anterior = Column(Integer, nullable=False)
     estoque_atual = Column(Integer, nullable=False)
-    motivo = Column(String(100))
-    venda_id = Column(Integer, ForeignKey("vendas_pdv.id"))
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    motivo = Column(String(200), nullable=False)
     
+    # Valores (opcionais para movimentos com valor)
+    valor_unitario = Column(Numeric(10, 2), nullable=True)
+    valor_total = Column(Numeric(10, 2), nullable=True)
+    
+    # Dados adicionais
+    observacoes = Column(Text, nullable=True)
+    documento_referencia = Column(String(100), nullable=True)  # NF, pedido, etc
+    
+    # Timestamp
+    criado_em = Column(DateTime, default=func.now())
+    
+    # Relacionamentos
     produto = relationship("Produto", back_populates="movimentos_estoque")
-    venda = relationship("VendaPDV")
-    usuario = relationship("Usuario")
+    usuario = relationship("Usuario", back_populates="movimentos_estoque")
+    venda = relationship("Transacao", back_populates="movimentos_estoque")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_movimento_produto', 'produto_id'),
+        Index('idx_movimento_usuario', 'usuario_id'),
+        Index('idx_movimento_tipo', 'tipo_movimento'),
+        Index('idx_movimento_data', 'criado_em'),
+    )
 
-class CaixaPDV(Base):
-    __tablename__ = "caixa_pdv"
+class VendaPDV(Base):
+    """Vendas realizadas pelo sistema PDV"""
+    __tablename__ = "vendas_pdv"
     
-    id = Column(Integer, primary_key=True, index=True)
-    numero_caixa = Column(String(10), nullable=False)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    usuario_operador_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    valor_abertura = Column(Numeric(10, 2), default=0)
-    valor_vendas = Column(Numeric(10, 2), default=0)
-    valor_sangrias = Column(Numeric(10, 2), default=0)
-    valor_fechamento = Column(Numeric(10, 2), default=0)
-    status = Column(String(20), default="aberto")  # aberto, fechado
-    data_abertura = Column(DateTime(timezone=True), server_default=func.now())
-    data_fechamento = Column(DateTime(timezone=True))
-    observacoes = Column(Text)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evento_id = Column(UUID(as_uuid=True), ForeignKey("eventos.id"), nullable=False)
+    usuario_vendedor_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
     
-    evento = relationship("Evento")
-    operador = relationship("Usuario")
+    # Dados da venda
+    numero_venda = Column(String(50), unique=True, nullable=False)
+    status = Column(String(20), default="PENDENTE")  # PENDENTE, APROVADA, CANCELADA
+    
+    # Valores
+    valor_bruto = Column(Numeric(10, 2), nullable=False)
+    valor_desconto = Column(Numeric(10, 2), default=0.00)
+    valor_liquido = Column(Numeric(10, 2), nullable=False)
+    
+    # Pagamento
+    forma_pagamento = Column(Enum(TipoPagamento), nullable=False)
+    valor_pago = Column(Numeric(10, 2), nullable=False)
+    valor_troco = Column(Numeric(10, 2), default=0.00)
+    
+    # Timestamps
+    criado_em = Column(DateTime, default=func.now())
+    aprovado_em = Column(DateTime, nullable=True)
+    
+    # Relacionamentos
+    evento = relationship("Evento", back_populates="vendas_pdv")
+    vendedor = relationship("Usuario", back_populates="vendas_pdv")
+    itens = relationship("ItemVendaPDV", back_populates="venda", cascade="all, delete-orphan")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_venda_evento', 'evento_id'),
+        Index('idx_venda_vendedor', 'usuario_vendedor_id'),
+        Index('idx_venda_status', 'status'),
+        Index('idx_venda_data', 'criado_em'),
+    )
 
-class LogAuditoria(Base):
-    __tablename__ = "logs_auditoria"
+class ItemVendaPDV(Base):
+    """Itens de uma venda PDV"""
+    __tablename__ = "itens_venda_pdv"
     
-    id = Column(Integer, primary_key=True, index=True)
-    cpf_usuario = Column(String(14), nullable=False, index=True)
-    acao = Column(String(100), nullable=False)
-    tabela_afetada = Column(String(50))
-    registro_id = Column(Integer)
-    dados_anteriores = Column(Text)
-    dados_novos = Column(Text)
-    ip_origem = Column(String(45))
-    user_agent = Column(Text)
-    evento_id = Column(Integer, ForeignKey("eventos.id"))
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"))
-    status = Column(String(20), default="sucesso")
-    detalhes = Column(Text)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venda_id = Column(UUID(as_uuid=True), ForeignKey("vendas_pdv.id"), nullable=False)
+    produto_id = Column(UUID(as_uuid=True), ForeignKey("produtos.id"), nullable=False)
     
-    evento = relationship("Evento")
-    promoter = relationship("Usuario")
+    # Dados do item
+    quantidade = Column(Integer, nullable=False)
+    preco_unitario = Column(Numeric(10, 2), nullable=False)
+    desconto_unitario = Column(Numeric(10, 2), default=0.00)
+    preco_total = Column(Numeric(10, 2), nullable=False)
+    
+    # Relacionamentos
+    venda = relationship("VendaPDV", back_populates="itens")
+    produto = relationship("Produto", back_populates="itens_venda_pdv")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_item_venda', 'venda_id'),
+        Index('idx_item_venda_produto', 'produto_id'),
+    )
 
-
-class TipoMovimentacaoFinanceira(enum.Enum):
-    ENTRADA = "entrada"
-    SAIDA = "saida"
-    AJUSTE = "ajuste"
-    REPASSE_PROMOTER = "repasse_promoter"
-    RECEITA_VENDAS = "receita_vendas"
-    RECEITA_LISTAS = "receita_listas"
-
-
-class StatusMovimentacaoFinanceira(enum.Enum):
-    PENDENTE = "pendente"
-    APROVADA = "aprovada"
-    CANCELADA = "cancelada"
-
-
-class MovimentacaoFinanceira(Base):
-    __tablename__ = "movimentacoes_financeiras"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    tipo = Column(Enum(TipoMovimentacaoFinanceira), nullable=False)
-    categoria = Column(String(100), nullable=False)
-    descricao = Column(Text, nullable=False)
-    valor = Column(Numeric(10, 2), nullable=False)
-    status = Column(Enum(StatusMovimentacaoFinanceira), default=StatusMovimentacaoFinanceira.PENDENTE)
-    
-    usuario_responsavel_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"))
-    
-    comprovante_url = Column(String(500))
-    numero_documento = Column(String(100))
-    
-    observacoes = Column(Text)
-    data_vencimento = Column(Date)
-    data_pagamento = Column(Date)
-    metodo_pagamento = Column(String(50))
-    
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    evento = relationship("Evento")
-    usuario_responsavel = relationship("Usuario", foreign_keys=[usuario_responsavel_id])
-    promoter = relationship("Usuario", foreign_keys=[promoter_id])
-
-
-class CaixaEvento(Base):
-    __tablename__ = "caixas_eventos"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    evento_id = Column(Integer, ForeignKey("eventos.id"), nullable=False)
-    data_abertura = Column(DateTime(timezone=True), server_default=func.now())
-    data_fechamento = Column(DateTime(timezone=True))
-    
-    saldo_inicial = Column(Numeric(10, 2), default=0)
-    total_entradas = Column(Numeric(10, 2), default=0)
-    total_saidas = Column(Numeric(10, 2), default=0)
-    total_vendas_pdv = Column(Numeric(10, 2), default=0)
-    total_vendas_listas = Column(Numeric(10, 2), default=0)
-    saldo_final = Column(Numeric(10, 2), default=0)
-    
-    status = Column(String(20), default="aberto")
-    usuario_abertura_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    usuario_fechamento_id = Column(Integer, ForeignKey("usuarios.id"))
-    
-    observacoes_abertura = Column(Text)
-    observacoes_fechamento = Column(Text)
-    
-    evento = relationship("Evento")
-    usuario_abertura = relationship("Usuario", foreign_keys=[usuario_abertura_id])
-    usuario_fechamento = relationship("Usuario", foreign_keys=[usuario_fechamento_id])
-
-class TipoConquista(enum.Enum):
-    VENDAS = "vendas"
-    PRESENCA = "presenca"
-    FIDELIDADE = "fidelidade"
-    CRESCIMENTO = "crescimento"
-    ESPECIAL = "especial"
-
-class NivelBadge(enum.Enum):
-    BRONZE = "bronze"
-    PRATA = "prata"
-    OURO = "ouro"
-    PLATINA = "platina"
-    DIAMANTE = "diamante"
-    LENDA = "lenda"
-
-class Conquista(Base):
-    __tablename__ = "conquistas"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(100), nullable=False)
-    descricao = Column(Text, nullable=False)
-    tipo = Column(Enum(TipoConquista), nullable=False)
-    criterio_valor = Column(Integer, nullable=False)
-    badge_nivel = Column(Enum(NivelBadge), nullable=False)
-    icone = Column(String(50))
-    ativa = Column(Boolean, default=True)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
+# ================================
+# SISTEMA DE GAMIFICAÇÃO COMPLEMENTAR
+# ================================
 
 class PromoterConquista(Base):
+    """Conquistas específicas para promoters"""
     __tablename__ = "promoter_conquistas"
     
-    id = Column(Integer, primary_key=True, index=True)
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    conquista_id = Column(Integer, ForeignKey("conquistas.id"), nullable=False)
-    evento_id = Column(Integer, ForeignKey("eventos.id"))
-    valor_alcancado = Column(Integer, nullable=False)
-    data_conquista = Column(DateTime(timezone=True), server_default=func.now())
-    notificado = Column(Boolean, default=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
     
-    promoter = relationship("Usuario")
-    conquista = relationship("Conquista")
-    evento = relationship("Evento")
+    # Dados da conquista
+    nome = Column(String(100), nullable=False)
+    descricao = Column(Text, nullable=False)
+    tipo = Column(String(50), nullable=False)  # vendas, participacao, engajamento
+    nivel = Column(String(20), default="bronze")  # bronze, prata, ouro, diamante
+    
+    # Métricas
+    meta_valor = Column(Numeric(10, 2), nullable=True)
+    meta_quantidade = Column(Integer, nullable=True)
+    valor_atual = Column(Numeric(10, 2), default=0)
+    quantidade_atual = Column(Integer, default=0)
+    progresso_percentual = Column(Numeric(5, 2), default=0)
+    
+    # Status
+    desbloqueada = Column(Boolean, default=False)
+    data_desbloqueio = Column(DateTime, nullable=True)
+    pontos_xp = Column(Integer, default=0)
+    
+    # Timestamps
+    criado_em = Column(DateTime, default=func.now())
+    atualizado_em = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    usuario = relationship("Usuario", back_populates="conquistas_promoter")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_conquista_usuario', 'usuario_id'),
+        Index('idx_conquista_tipo', 'tipo'),
+        Index('idx_conquista_nivel', 'nivel'),
+    )
 
-class MetricaPromoter(Base):
-    __tablename__ = "metricas_promoters"
+class RankingGamificacao(Base):
+    """Ranking global de gamificação"""
+    __tablename__ = "ranking_gamificacao"
     
-    id = Column(Integer, primary_key=True, index=True)
-    promoter_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    evento_id = Column(Integer, ForeignKey("eventos.id"))
-    periodo_inicio = Column(Date, nullable=False)
-    periodo_fim = Column(Date, nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    empresa_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.empresa_id"), nullable=False)
     
-    total_vendas = Column(Integer, default=0)
-    receita_gerada = Column(Numeric(10, 2), default=0)
-    total_convidados = Column(Integer, default=0)
-    total_presentes = Column(Integer, default=0)
-    taxa_presenca = Column(Numeric(5, 2), default=0)
-    taxa_conversao = Column(Numeric(5, 2), default=0)
-    crescimento_vendas = Column(Numeric(5, 2), default=0)
+    # Pontuação
+    xp_total = Column(Integer, default=0)
+    vendas_total = Column(Numeric(12, 2), default=0)
+    vendas_mes_atual = Column(Numeric(10, 2), default=0)
+    vendas_mes_anterior = Column(Numeric(10, 2), default=0)
     
-    posicao_vendas = Column(Integer)
-    posicao_presenca = Column(Integer)
-    posicao_geral = Column(Integer)
-    badge_atual = Column(Enum(NivelBadge), default=NivelBadge.BRONZE)
+    # Ranking
+    posicao_geral = Column(Integer, nullable=True)
+    posicao_empresa = Column(Integer, nullable=True)
+    badge_atual = Column(String(50), default="novato")
+    nivel_atual = Column(Integer, default=1)
     
-    atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # Crescimento
+    crescimento_percentual = Column(Numeric(5, 2), default=0)
+    streak_vendas = Column(Integer, default=0)  # Dias consecutivos com vendas
     
-    promoter = relationship("Usuario")
-    evento = relationship("Evento")
+    # Períodos
+    mes_referencia = Column(String(7), nullable=False)  # YYYY-MM
+    ultima_atualizacao = Column(DateTime, default=func.now())
+    
+    # Relacionamentos
+    usuario = relationship("Usuario", back_populates="ranking_gamificacao")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_ranking_usuario', 'usuario_id'),
+        Index('idx_ranking_empresa', 'empresa_id'),
+        Index('idx_ranking_xp', 'xp_total'),
+        Index('idx_ranking_mes', 'mes_referencia'),
+        Index('idx_ranking_unico', 'usuario_id', 'mes_referencia', unique=True),
+    )
 
+# ================================
+# SISTEMA DE PAYMENT LINKS
+# ================================
 
+class StatusLink(PyEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    EXPIRED = "expired"
+    COMPLETED = "completed"
 
-class TipoTablet(enum.Enum):
-    POS = "pos"
-    KIOSK = "kiosk"
-    WAITER = "waiter"
-    KITCHEN = "kitchen"
+class TipoPagamentoLink(PyEnum):
+    SINGLE = "single"        # Pagamento único
+    RECURRING = "recurring"   # Recorrente
+    FLEXIBLE = "flexible"     # Valor flexível
 
-class StatusTablet(enum.Enum):
-    CONECTADO = "conectado"
-    DESCONECTADO = "desconectado"
-    CONECTANDO = "conectando"
-    ERRO = "erro"
+class StatusPagamentoLink(PyEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
 
-class Tablet(Base):
-    __tablename__ = "tablets"
+class PaymentLink(Base):
+    """Links de pagamento dinâmicos"""
+    __tablename__ = "payment_links"
     
-    id = Column(String, primary_key=True, index=True)
-    nome = Column(String, nullable=False)
-    ip = Column(String, nullable=False)
-    porta = Column(Integer, default=8080)
-    tipo = Column(Enum(TipoTablet), default=TipoTablet.POS)
-    status = Column(Enum(StatusTablet), default=StatusTablet.DESCONECTADO)
-    empresa_id = Column(String, ForeignKey("empresas.id"), nullable=False)
+    id = Column(String(36), primary_key=True)  # UUID string
+    user_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    url_hash = Column(String(32), unique=True, nullable=False, index=True)
     
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    ultima_conexao = Column(DateTime(timezone=True))
+    # Dados básicos
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
     
-    empresa = relationship("Empresa")
-    logs = relationship("TabletLog", back_populates="tablet")
-    configuracao_meep = relationship("ConfiguracaoMeep", back_populates="tablet", uselist=False)
+    # Valores
+    amount = Column(Numeric(12, 2), nullable=True)  # None para valor flexível
+    min_amount = Column(Numeric(12, 2), nullable=True)
+    max_amount = Column(Numeric(12, 2), nullable=True)
+    currency = Column(String(3), default="BRL")
+    
+    # Configurações
+    payment_type = Column(Enum(TipoPagamentoLink), default=TipoPagamentoLink.SINGLE)
+    status = Column(Enum(StatusLink), default=StatusLink.ACTIVE)
+    expires_at = Column(DateTime, nullable=True)
+    max_uses = Column(Integer, nullable=True)
+    
+    # Personalização
+    theme = Column(String(20), default="default")
+    custom_css = Column(Text, nullable=True)
+    logo_url = Column(String(500), nullable=True)
+    success_url = Column(String(500), nullable=True)
+    cancel_url = Column(String(500), nullable=True)
+    
+    # Split de pagamentos
+    enable_split = Column(Boolean, default=False)
+    split_recipients = Column(JSON, nullable=True)  # Lista de destinatários
+    
+    # Configurações avançadas
+    collect_customer_info = Column(Boolean, default=True)
+    send_receipt = Column(Boolean, default=True)
+    allow_installments = Column(Boolean, default=False)
+    webhook_url = Column(String(500), nullable=True)
+    
+    # Estatísticas
+    uses_count = Column(Integer, default=0)
+    views_count = Column(Integer, default=0)
+    total_collected = Column(Numeric(15, 2), default=0)
+    
+    # Metadados
+    link_metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    user = relationship("Usuario")
+    payment_attempts = relationship("PaymentAttempt", back_populates="payment_link")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_payment_link_user', 'user_id'),
+        Index('idx_payment_link_status', 'status'),
+        Index('idx_payment_link_type', 'payment_type'),
+        Index('idx_payment_link_created', 'created_at'),
+        Index('idx_payment_link_expires', 'expires_at'),
+        Index('idx_payment_link_hash', 'url_hash'),
+    )
 
-class TabletLog(Base):
-    __tablename__ = "tablet_logs"
+class PaymentAttempt(Base):
+    """Tentativas de pagamento via links"""
+    __tablename__ = "payment_attempts"
     
-    id = Column(String, primary_key=True, index=True)
-    tablet_id = Column(String, ForeignKey("tablets.id"), nullable=False)
-    evento = Column(String, nullable=False)
-    detalhes = Column(Text)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    id = Column(String(36), primary_key=True)  # UUID string
+    link_id = Column(String(36), ForeignKey("payment_links.id"), nullable=False)
     
-    tablet = relationship("Tablet", back_populates="logs")
+    # Dados do pagamento
+    amount = Column(Numeric(12, 2), nullable=False)
+    currency = Column(String(3), default="BRL")
+    
+    # Dados do cliente
+    customer_name = Column(String(200), nullable=True)
+    customer_email = Column(String(255), nullable=True)
+    customer_phone = Column(String(20), nullable=True)
+    customer_document = Column(String(20), nullable=True)
+    
+    # Dados do pagamento
+    payment_method = Column(String(50), nullable=True)
+    transaction_id = Column(String(100), nullable=True)
+    gateway_response = Column(JSON, nullable=True)
+    
+    # Status e processamento
+    status = Column(Enum(StatusPagamentoLink), default=StatusPagamentoLink.PENDING)
+    failure_reason = Column(Text, nullable=True)
+    
+    # Dados técnicos
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    processed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    payment_link = relationship("PaymentLink", back_populates="payment_attempts")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_payment_attempt_link', 'link_id'),
+        Index('idx_payment_attempt_status', 'status'),
+        Index('idx_payment_attempt_created', 'created_at'),
+        Index('idx_payment_attempt_transaction', 'transaction_id'),
+        Index('idx_payment_attempt_email', 'customer_email'),
+    )
 
-class ConfiguracaoMeep(Base):
-    __tablename__ = "configuracoes_meep"
+class PaymentLinkAnalytics(Base):
+    """Analytics consolidados de links de pagamento"""
+    __tablename__ = "payment_link_analytics"
     
-    id = Column(String, primary_key=True, index=True)
-    tablet_id = Column(String, ForeignKey("tablets.id"), nullable=False)
-    configuracao = Column(Text, nullable=False)
-    versao = Column(String, default="2.0.0")
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    link_id = Column(String(36), ForeignKey("payment_links.id"), nullable=False)
+    date = Column(DateTime, nullable=False)
     
-    tablet = relationship("Tablet", back_populates="configuracao_meep")
+    # Métricas do dia
+    views = Column(Integer, default=0)
+    attempts = Column(Integer, default=0)
+    successful_payments = Column(Integer, default=0)
+    failed_payments = Column(Integer, default=0)
+    
+    # Valores
+    total_amount = Column(Numeric(15, 2), default=0)
+    average_amount = Column(Numeric(10, 2), default=0)
+    
+    # Breakdown por método
+    payment_methods_breakdown = Column(JSON, nullable=True)
+    
+    # Geolocalização
+    countries = Column(JSON, nullable=True)
+    cities = Column(JSON, nullable=True)
+    
+    # Dispositivos
+    devices = Column(JSON, nullable=True)
+    browsers = Column(JSON, nullable=True)
+    
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relacionamentos
+    payment_link = relationship("PaymentLink")
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_analytics_link_date', 'link_id', 'date', unique=True),
+        Index('idx_analytics_date', 'date'),
+    )
 
-class StatusMeepClient(enum.Enum):
-    ATIVO = "ativo"
-    BLOQUEADO = "bloqueado"
-    INATIVO = "inativo"
+"""
+Views SQL que serão criadas para relatórios e dashboards:
 
-class SexoMeepClient(enum.Enum):
-    MASCULINO = "M"
-    FEMININO = "F"
-    OUTRO = "O"
-
-class ClientCategory(Base):
-    __tablename__ = "client_categories"
-    
-    id = Column(String, primary_key=True, index=True)
-    descricao = Column(String(255), nullable=False)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    empresa = relationship("Empresa")
-    clientes = relationship("MeepClient", back_populates="categoria")
-
-class MeepClient(Base):
-    __tablename__ = "meep_clients"
-    
-    id = Column(String, primary_key=True, index=True)
-    nome = Column(String(255), nullable=False)
-    cpf = Column(String(14), index=True)
-    identificador = Column(String(100), index=True)
-    telefone = Column(String(20))
-    email = Column(String(255))
-    data_nascimento = Column(Date)
-    sexo = Column(Enum(SexoMeepClient))
-    categoria_id = Column(String, ForeignKey("client_categories.id"))
-    status = Column(Enum(StatusMeepClient), default=StatusMeepClient.ATIVO)
-    valor_em_aberto = Column(Numeric(10, 2), default=0)
-    nome_na_lista = Column(Boolean, default=False)
-    has_alert = Column(Boolean, default=False)
-    empresa_id = Column(Integer, ForeignKey("empresas.id"), nullable=False)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    atualizado_em = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    empresa = relationship("Empresa")
-    categoria = relationship("ClientCategory", back_populates="clientes")
-    historico_bloqueios = relationship("ClientBlockHistory", back_populates="cliente")
-
-class ClientBlockHistory(Base):
-    __tablename__ = "client_block_history"
-    
-    id = Column(String, primary_key=True, index=True)
-    cliente_id = Column(String, ForeignKey("meep_clients.id"), nullable=False)
-    bloqueado_por = Column(String(255))
-    data_bloqueio = Column(DateTime(timezone=True))
-    razao_bloqueio = Column(Text)
-    desbloqueado_por = Column(String(255))
-    data_desbloqueio = Column(DateTime(timezone=True))
-    razao_desbloqueio = Column(Text)
-    criado_em = Column(DateTime(timezone=True), server_default=func.now())
-    
-    cliente = relationship("MeepClient", back_populates="historico_bloqueios")
+1. view_dashboard_evento - Métricas gerais por evento
+2. view_ranking_participantes - Ranking de pontuação
+3. view_vendas_pdv - Relatórios de vendas
+4. view_presenca_tempo_real - Status de presença em tempo real
+5. view_financeiro_resumo - Resumo financeiro por evento
+6. view_payment_links_summary - Resumo de links de pagamento
+7. view_payment_analytics - Analytics de pagamentos consolidados
+"""

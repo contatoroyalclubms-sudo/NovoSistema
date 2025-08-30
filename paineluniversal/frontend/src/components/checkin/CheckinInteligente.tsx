@@ -15,13 +15,7 @@ interface CheckinInteligente {
 
 const CheckinInteligente: React.FC<CheckinInteligente> = ({ eventoId = 1 }) => {
   const [eventos, setEventos] = useState<any[]>([]);
-  const [eventoSelecionado] = useState<number>(eventoId);
-  
-  useEffect(() => {
-    if (eventos.length === 0) {
-      carregarEventos();
-    }
-  }, [eventos]);
+  const [eventoSelecionado, setEventoSelecionado] = useState<number>(eventoId);
   const [cpf, setCpf] = useState('');
   const [qrCode, setQrCode] = useState('');
   const [validacaoCpf, setValidacaoCpf] = useState('');

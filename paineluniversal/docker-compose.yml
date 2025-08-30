@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: eventos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-eventos_db}
+      POSTGRES_USER: ${DB_USER:-eventos_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-eventos_2024_secure!}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/performance_optimization.sql:/docker-entrypoint-initdb.d/01-performance.sql
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - eventos_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-eventos_user} -d ${DB_NAME:-eventos_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: eventos_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-eventos_redis_2024!}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - eventos_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: eventos_backend
+    restart: unless-stopped
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-eventos_db}
+      DB_USER: ${DB_USER:-eventos_user}
+      DB_PASSWORD: ${DB_PASSWORD:-eventos_2024_secure!}
+      DATABASE_URL: postgresql://${DB_USER:-eventos_user}:${DB_PASSWORD:-eventos_2024_secure!}@postgres:5432/${DB_NAME:-eventos_db}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-eventos_redis_2024!}
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-ultra_secure_secret_key_eventos_2024_production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      
+      # Environment
+      ENVIRONMENT: production
+      DEBUG: false
+      
+      # CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,https://yourdomain.com}
+      
+      # Performance
+      WORKERS: 4
+      MAX_CONNECTIONS: 100
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8002}:8002"
+    volumes:
+      - ./backend/logs:/app/logs
+      - ./backend/backups:/app/backups
+    networks:
+      - eventos_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8002}
+        VITE_WS_BASE_URL: ${VITE_WS_BASE_URL:-ws://localhost:8002}
+    container_name: eventos_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    networks:
+      - eventos_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: eventos_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/certs:/etc/nginx/certs
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - eventos_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  eventos_network:
+    driver: bridge

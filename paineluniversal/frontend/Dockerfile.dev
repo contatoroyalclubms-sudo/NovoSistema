@@ -1,0 +1,36 @@
+FROM node:20-alpine
+
+# Instalar dependências do sistema
+RUN apk add --no-cache git curl
+
+# Criar usuário não-root
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S reactjs -u 1001
+
+# Definir diretório de trabalho
+WORKDIR /app
+
+# Copiar arquivos de dependências
+COPY package*.json ./
+
+# Instalar dependências
+RUN npm ci --only=development
+
+# Copiar código
+COPY . .
+
+# Ajustar permissões
+RUN chown -R reactjs:nodejs /app
+
+# Trocar para usuário não-root
+USER reactjs
+
+# Expor porta
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3000 || exit 1
+
+# Comando padrão
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

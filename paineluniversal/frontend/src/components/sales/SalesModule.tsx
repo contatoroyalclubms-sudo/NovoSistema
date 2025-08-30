@@ -40,11 +40,8 @@ const SalesModule: React.FC = () => {
   const carregarEventos = async () => {
     try {
       setLoading(true);
-      const eventosData = await eventoService.listar();
-      const filteredEvents = usuario?.empresa_id 
-        ? eventosData.filter(e => e.status === 'ativo' && e.empresa_id === usuario.empresa_id)
-        : eventosData.filter(e => e.status === 'ativo');
-      setEventos(filteredEvents);
+      const eventosData = await eventoService.listar(usuario?.empresa_id);
+      setEventos(eventosData.filter(e => e.status === 'ativo'));
     } catch (error) {
       setError('Erro ao carregar eventos');
     } finally {

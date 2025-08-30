@@ -8,7 +8,7 @@ import {
   Calendar, 
   MapPin, 
   Users, 
-  // DollarSign, // Available for future use 
+  DollarSign, 
   Plus, 
   Search, 
   Filter,
@@ -182,10 +182,6 @@ const EventosModule: React.FC = () => {
       default: return 'text-gray-600 bg-gray-100';
     }
   };
-
-  React.useEffect(() => {
-    getStatusFinanceiroColor('alto');
-  }, []);
 
   if (loading) {
     return (

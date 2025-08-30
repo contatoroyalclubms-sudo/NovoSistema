@@ -14,7 +14,9 @@ class WebSocketService {
   private connectWebSocket() {
     if (!this.eventoId) return;
 
-    const wsUrl = `ws://localhost:8000/api/ws/${this.eventoId}`;
+    const baseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8002';
+    const token = localStorage.getItem('access_token');
+    const wsUrl = `${baseUrl}/api/v1/ws/${this.eventoId}?token=${token}`;
     
     try {
       this.ws = new WebSocket(wsUrl);

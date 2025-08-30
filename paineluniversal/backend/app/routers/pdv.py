@@ -1,650 +1,835 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_
+"""
+Router PDV (Ponto de Venda) - Sistema completo de vendas
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query, UploadFile, File
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, func, desc, or_
 from typing import List, Optional
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from decimal import Decimal
-import uuid
-import json
-from ..database import get_db
-from ..models import (
-    Produto, Comanda, VendaPDV, ItemVendaPDV, PagamentoPDV, 
-    RecargaComanda, MovimentoEstoque, CaixaPDV, Evento,
-    StatusProduto, StatusComanda, StatusVendaPDV, TipoPagamentoPDV
+import logging
+
+from app.database import get_db
+from app.models import (
+    Produto, Venda, ItemVenda, Usuario, Evento, EstoqueProduto,
+    StatusVenda, TipoUsuario, MovimentacaoEstoque, TipoMovimentacao
 )
-from ..schemas import (
-    ProdutoCreate, Produto as ProdutoSchema, ComandaCreate, Comanda as ComandaSchema,
-    VendaPDVCreate, VendaPDV as VendaPDVSchema, RecargaComandaCreate, RecargaComanda as RecargaComandaSchema,
-    CaixaPDVCreate, CaixaPDV as CaixaPDVSchema, RelatorioVendasPDV, DashboardPDV
+from app.schemas import (
+    Produto as ProdutoSchema, ProdutoCreate, ProdutoUpdate,
+    Venda as VendaSchema, VendaCreate, ItemVendaCreate,
+    EstoqueProduto as EstoqueSchema, MovimentacaoEstoque as MovimentacaoSchema,
+    PaginatedResponse, ResponseSuccess, DashboardPDV
 )
-from ..auth import obter_usuario_atual, verificar_permissao_admin
-from ..websocket import notify_stock_update, notify_new_sale, notify_cash_register_update
+from app.auth import (
+    get_current_active_user, get_current_operador_user,
+    verificar_acesso_evento, log_user_action
+)
+from app.websocket import event_notifier
+from app.utils.image_uploader import upload_image, delete_image
 
-router = APIRouter(prefix="/pdv", tags=["PDV"])
+logger = logging.getLogger(__name__)
+router = APIRouter()
 
-@router.post("/produtos", response_model=ProdutoSchema)
-async def criar_produto(
-    produto: ProdutoCreate,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(verificar_permissao_admin)
+# =============================================================================
+# ENDPOINTS DE PRODUTOS
+# =============================================================================
+
+@router.post("/produtos", response_model=ProdutoSchema, summary="Criar produto")
+async def create_produto(
+    produto_data: ProdutoCreate,
+    request: Request,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    """Criar novo produto"""
-    
-    evento = db.query(Evento).filter(Evento.id == produto.evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if evento.empresa_id != usuario_atual.empresa_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    if not produto.codigo_interno:
-        import uuid
-        produto.codigo_interno = f"PROD{datetime.now().strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4())[:8].upper()}"
-    
-    db_produto = Produto(
-        **produto.model_dump(),
-        empresa_id=usuario_atual.empresa_id,
-        status=StatusProduto.ATIVO
-    )
-    
-    db.add(db_produto)
-    db.commit()
-    db.refresh(db_produto)
-    
-    return db_produto
-
-@router.get("/produtos", response_model=List[ProdutoSchema])
-async def listar_produtos(
-    evento_id: int,
-    categoria: Optional[str] = None,
-    status: Optional[str] = None,
-    busca: Optional[str] = None,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Listar produtos do evento"""
-    
-    evento = db.query(Evento).filter(Evento.id == evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    query = db.query(Produto).filter(Produto.evento_id == evento_id)
-    
-    if categoria:
-        query = query.filter(Produto.categoria == categoria)
-    
-    if status:
-        query = query.filter(Produto.status == status)
-    
-    if busca:
-        query = query.filter(
-            Produto.nome.ilike(f"%{busca}%") |
-            Produto.codigo_barras.ilike(f"%{busca}%") |
-            Produto.codigo_interno.ilike(f"%{busca}%")
-        )
-    
-    return query.order_by(Produto.nome).all()
-
-@router.get("/produtos/{produto_id}", response_model=ProdutoSchema)
-async def obter_produto(
-    produto_id: int,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Obter produto por ID"""
-    
-    produto = db.query(Produto).filter(Produto.id == produto_id).first()
-    if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != produto.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    return produto
-
-@router.put("/produtos/{produto_id}", response_model=ProdutoSchema)
-async def atualizar_produto(
-    produto_id: int,
-    produto_update: ProdutoCreate,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(verificar_permissao_admin)
-):
-    """Atualizar produto"""
-    
-    produto = db.query(Produto).filter(Produto.id == produto_id).first()
-    if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
-    
-    if produto.empresa_id != usuario_atual.empresa_id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    for field, value in produto_update.model_dump(exclude={'evento_id'}).items():
-        if hasattr(produto, field):
-            setattr(produto, field, value)
-    
-    db.commit()
-    db.refresh(produto)
-    
-    return produto
-
-@router.post("/comandas", response_model=ComandaSchema)
-async def criar_comanda(
-    comanda: ComandaCreate,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Criar nova comanda"""
-    
-    evento = db.query(Evento).filter(Evento.id == comanda.evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    qr_code = str(uuid.uuid4())[:8].upper()
-    
-    db_comanda = Comanda(
-        **comanda.model_dump(),
-        empresa_id=usuario_atual.empresa_id,
-        qr_code=qr_code,
-        status=StatusComanda.ATIVA
-    )
-    
-    db.add(db_comanda)
-    db.commit()
-    db.refresh(db_comanda)
-    
-    return db_comanda
-
-@router.get("/comandas", response_model=List[ComandaSchema])
-async def listar_comandas(
-    evento_id: int,
-    status: Optional[str] = None,
-    cpf: Optional[str] = None,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Listar comandas do evento"""
-    
-    evento = db.query(Evento).filter(Evento.id == evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    query = db.query(Comanda).filter(Comanda.evento_id == evento_id)
-    
-    if status:
-        query = query.filter(Comanda.status == status)
-    
-    if cpf:
-        query = query.filter(Comanda.cpf_cliente == cpf)
-    
-    return query.order_by(desc(Comanda.criado_em)).all()
-
-@router.post("/comandas/{comanda_id}/recarga", response_model=RecargaComandaSchema)
-async def recarregar_comanda(
-    comanda_id: int,
-    recarga: RecargaComandaCreate,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Recarregar saldo da comanda"""
-    
-    comanda = db.query(Comanda).filter(Comanda.id == comanda_id).first()
-    if not comanda:
-        raise HTTPException(status_code=404, detail="Comanda não encontrada")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != comanda.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    if comanda.status != StatusComanda.ATIVA:
-        raise HTTPException(status_code=400, detail="Comanda não está ativa")
-    
-    db_recarga = RecargaComanda(
-        comanda_id=comanda_id,
-        valor=recarga.valor,
-        tipo_pagamento=recarga.tipo_pagamento,
-        usuario_id=usuario_atual.id,
-        codigo_transacao=str(uuid.uuid4())
-    )
-    
-    comanda.saldo_atual += recarga.valor
-    
-    db.add(db_recarga)
-    db.commit()
-    db.refresh(db_recarga)
-    
-    return db_recarga
-
-@router.post("/vendas", response_model=VendaPDVSchema)
-async def processar_venda(
-    venda: VendaPDVCreate,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Processar venda no PDV"""
-    
-    evento = db.query(Evento).filter(Evento.id == venda.evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    for item in venda.itens:
-        produto = db.query(Produto).filter(Produto.id == item.produto_id).first()
-        if not produto:
-            raise HTTPException(status_code=404, detail=f"Produto {item.produto_id} não encontrado")
-        
-        if produto.controla_estoque and produto.estoque_atual < item.quantidade:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Estoque insuficiente para {produto.nome}. Disponível: {produto.estoque_atual}"
-            )
-    
-    valor_total = sum(item.quantidade * item.preco_unitario for item in venda.itens)
-    valor_desconto = Decimal('0.00')
-    
-    if venda.cupom_codigo:
-        pass
-    
-    valor_final = valor_total - valor_desconto
-    
-    valor_pagamentos = sum(pag.valor for pag in venda.pagamentos)
-    if valor_pagamentos != valor_final:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Valor dos pagamentos ({valor_pagamentos}) não confere com valor final ({valor_final})"
-        )
-    
-    numero_venda = f"PDV{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
-    db_venda = VendaPDV(
-        numero_venda=numero_venda,
-        cpf_cliente=venda.cpf_cliente,
-        nome_cliente=venda.nome_cliente,
-        valor_total=valor_total,
-        valor_desconto=valor_desconto,
-        valor_final=valor_final,
-        tipo_pagamento=venda.pagamentos[0].tipo_pagamento if venda.pagamentos else TipoPagamentoPDV.DINHEIRO,
-        status=StatusVendaPDV.APROVADA,
-        comanda_id=venda.comanda_id,
-        evento_id=venda.evento_id,
-        empresa_id=usuario_atual.empresa_id,
-        usuario_vendedor_id=usuario_atual.id,
-        cupom_codigo=venda.cupom_codigo,
-        observacoes=venda.observacoes
-    )
-    
-    db.add(db_venda)
-    db.flush()  # Para obter o ID da venda
-    
-    for item in venda.itens:
-        preco_total = item.quantidade * item.preco_unitario
-        
-        db_item = ItemVendaPDV(
-            venda_id=db_venda.id,
-            produto_id=item.produto_id,
-            quantidade=item.quantidade,
-            preco_unitario=item.preco_unitario,
-            preco_total=preco_total,
-            observacoes=item.observacoes
-        )
-        db.add(db_item)
-        
-        produto = db.query(Produto).filter(Produto.id == item.produto_id).first()
-        if produto.controla_estoque:
-            estoque_anterior = produto.estoque_atual
-            produto.estoque_atual -= item.quantidade
-            
-            movimento = MovimentoEstoque(
-                produto_id=item.produto_id,
-                tipo_movimento="saida",
-                quantidade=item.quantidade,
-                estoque_anterior=estoque_anterior,
-                estoque_atual=produto.estoque_atual,
-                motivo="Venda PDV",
-                venda_id=db_venda.id,
-                usuario_id=usuario_atual.id
-            )
-            db.add(movimento)
-    
-    for pagamento in venda.pagamentos:
-        db_pagamento = PagamentoPDV(
-            venda_id=db_venda.id,
-            tipo_pagamento=pagamento.tipo_pagamento,
-            valor=pagamento.valor,
-            promoter_id=pagamento.promoter_id,
-            comissao_percentual=pagamento.comissao_percentual or Decimal('0.00'),
-            valor_comissao=(pagamento.valor * (pagamento.comissao_percentual or Decimal('0.00')) / 100),
-            codigo_transacao=str(uuid.uuid4())
-        )
-        db.add(db_pagamento)
-    
-    if venda.comanda_id:
-        comanda = db.query(Comanda).filter(Comanda.id == venda.comanda_id).first()
-        if comanda and comanda.saldo_atual >= valor_final:
-            comanda.saldo_atual -= valor_final
-        else:
-            raise HTTPException(status_code=400, detail="Saldo insuficiente na comanda")
-    
-    db.commit()
-    db.refresh(db_venda)
-    
-    await notify_new_sale(venda.evento_id, {
-        "numero_venda": db_venda.numero_venda,
-        "valor_final": float(db_venda.valor_final),
-        "tipo_pagamento": db_venda.pagamentos[0].tipo_pagamento.value if db_venda.pagamentos else "N/A",
-        "itens_count": len(venda.itens)
-    })
-    
-    for item in venda.itens:
-        produto = db.query(Produto).filter(Produto.id == item.produto_id).first()
-        if produto:
-            await notify_stock_update(
-                produto.id, 
-                venda.evento_id, 
-                produto.estoque_atual,
-                produto.nome
-            )
-    
-    background_tasks.add_task(imprimir_comprovante, db_venda.id)
-    
-    return db_venda
-
-@router.get("/vendas", response_model=List[VendaPDVSchema])
-async def listar_vendas(
-    evento_id: int,
-    data_inicio: Optional[date] = None,
-    data_fim: Optional[date] = None,
-    status: Optional[str] = None,
-    cpf_cliente: Optional[str] = None,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Listar vendas do PDV"""
-    
-    evento = db.query(Evento).filter(Evento.id == evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    query = db.query(VendaPDV).filter(VendaPDV.evento_id == evento_id)
-    
-    if data_inicio:
-        query = query.filter(func.date(VendaPDV.criado_em) >= data_inicio)
-    
-    if data_fim:
-        query = query.filter(func.date(VendaPDV.criado_em) <= data_fim)
-    
-    if status:
-        query = query.filter(VendaPDV.status == status)
-    
-    if cpf_cliente:
-        query = query.filter(VendaPDV.cpf_cliente == cpf_cliente)
-    
-    return query.order_by(desc(VendaPDV.criado_em)).all()
-
-@router.post("/caixa/abrir", response_model=CaixaPDVSchema)
-async def abrir_caixa(
-    caixa: CaixaPDVCreate,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Abrir caixa PDV"""
-    
-    evento = db.query(Evento).filter(Evento.id == caixa.evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    caixa_aberto = db.query(CaixaPDV).filter(
-        and_(
-            CaixaPDV.evento_id == caixa.evento_id,
-            CaixaPDV.usuario_operador_id == usuario_atual.id,
-            CaixaPDV.status == "aberto"
-        )
-    ).first()
-    
-    if caixa_aberto:
-        raise HTTPException(status_code=400, detail="Já existe um caixa aberto para este operador")
-    
-    db_caixa = CaixaPDV(
-        numero_caixa=caixa.numero_caixa,
-        evento_id=caixa.evento_id,
-        usuario_operador_id=usuario_atual.id,
-        valor_abertura=caixa.valor_abertura,
-        status="aberto"
-    )
-    
-    db.add(db_caixa)
-    db.commit()
-    db.refresh(db_caixa)
-    
-    return db_caixa
-
-@router.post("/caixa/{caixa_id}/fechar", response_model=CaixaPDVSchema)
-async def fechar_caixa(
-    caixa_id: int,
-    valor_fechamento: Decimal,
-    observacoes: Optional[str] = None,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Fechar caixa PDV"""
-    
-    caixa = db.query(CaixaPDV).filter(CaixaPDV.id == caixa_id).first()
-    if not caixa:
-        raise HTTPException(status_code=404, detail="Caixa não encontrado")
-    
-    if caixa.usuario_operador_id != usuario_atual.id:
-        raise HTTPException(status_code=403, detail="Apenas o operador pode fechar o caixa")
-    
-    if caixa.status != "aberto":
-        raise HTTPException(status_code=400, detail="Caixa já está fechado")
-    
-    vendas_periodo = db.query(func.sum(VendaPDV.valor_final)).filter(
-        and_(
-            VendaPDV.evento_id == caixa.evento_id,
-            VendaPDV.usuario_vendedor_id == usuario_atual.id,
-            VendaPDV.criado_em >= caixa.data_abertura,
-            VendaPDV.status == StatusVendaPDV.APROVADA
-        )
-    ).scalar() or Decimal('0.00')
-    
-    caixa.valor_vendas = vendas_periodo
-    caixa.valor_fechamento = valor_fechamento
-    caixa.data_fechamento = datetime.now()
-    caixa.observacoes = observacoes
-    caixa.status = "fechado"
-    
-    db.commit()
-    db.refresh(caixa)
-    
-    return caixa
-
-@router.get("/dashboard/{evento_id}", response_model=DashboardPDV)
-async def obter_dashboard_pdv(
-    evento_id: int,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Obter dashboard do PDV"""
-    
-    evento = db.query(Evento).filter(Evento.id == evento_id).first()
-    if not evento:
-        raise HTTPException(status_code=404, detail="Evento não encontrado")
-    
-    if (usuario_atual.tipo.value != "admin" and 
-        usuario_atual.empresa_id != evento.empresa_id):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    hoje = date.today()
-    
-    vendas_hoje = db.query(func.count(VendaPDV.id)).filter(
-        and_(
-            VendaPDV.evento_id == evento_id,
-            func.date(VendaPDV.criado_em) == hoje,
-            VendaPDV.status == StatusVendaPDV.APROVADA
-        )
-    ).scalar() or 0
-    
-    valor_vendas_hoje = db.query(func.sum(VendaPDV.valor_final)).filter(
-        and_(
-            VendaPDV.evento_id == evento_id,
-            func.date(VendaPDV.criado_em) == hoje,
-            VendaPDV.status == StatusVendaPDV.APROVADA
-        )
-    ).scalar() or Decimal('0.00')
-    
-    produtos_em_falta = db.query(func.count(Produto.id)).filter(
-        and_(
-            Produto.evento_id == evento_id,
-            Produto.controla_estoque == True,
-            Produto.estoque_atual <= Produto.estoque_minimo
-        )
-    ).scalar() or 0
-    
-    comandas_ativas = db.query(func.count(Comanda.id)).filter(
-        and_(
-            Comanda.evento_id == evento_id,
-            Comanda.status == StatusComanda.ATIVA
-        )
-    ).scalar() or 0
-    
-    caixas_abertos = db.query(func.count(CaixaPDV.id)).filter(
-        and_(
-            CaixaPDV.evento_id == evento_id,
-            CaixaPDV.status == "aberto"
-        )
-    ).scalar() or 0
-    
-    return DashboardPDV(
-        vendas_hoje=vendas_hoje,
-        valor_vendas_hoje=valor_vendas_hoje,
-        produtos_em_falta=produtos_em_falta,
-        comandas_ativas=comandas_ativas,
-        caixas_abertos=caixas_abertos,
-        vendas_por_hora=[],  # Implementar conforme necessário
-        produtos_mais_vendidos=[],  # Implementar conforme necessário
-        alertas=[]  # Implementar conforme necessário
-    )
-
-@router.get("/relatorios/x/{caixa_id}")
-async def relatorio_x(
-    caixa_id: int,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Relatório X - Vendas do caixa sem fechamento"""
-    
-    caixa = db.query(CaixaPDV).filter(CaixaPDV.id == caixa_id).first()
-    if not caixa:
-        raise HTTPException(status_code=404, detail="Caixa não encontrado")
-    
-    if caixa.usuario_operador_id != usuario_atual.id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    vendas = db.query(VendaPDV).filter(
-        and_(
-            VendaPDV.evento_id == caixa.evento_id,
-            VendaPDV.usuario_vendedor_id == usuario_atual.id,
-            VendaPDV.criado_em >= caixa.data_abertura,
-            VendaPDV.status == StatusVendaPDV.APROVADA
-        )
-    ).all()
-    
-    totais_pagamento = {}
-    total_geral = Decimal('0.00')
-    
-    for venda in vendas:
-        for pagamento in venda.pagamentos:
-            forma = pagamento.tipo_pagamento.value
-            if forma not in totais_pagamento:
-                totais_pagamento[forma] = Decimal('0.00')
-            totais_pagamento[forma] += pagamento.valor
-            total_geral += pagamento.valor
-    
-    return {
-        "tipo": "relatorio_x",
-        "caixa_id": caixa_id,
-        "numero_caixa": caixa.numero_caixa,
-        "data_abertura": caixa.data_abertura,
-        "operador": usuario_atual.nome,
-        "total_vendas": len(vendas),
-        "valor_total": float(total_geral),
-        "totais_por_pagamento": {k: float(v) for k, v in totais_pagamento.items()},
-        "vendas": [
-            {
-                "numero_venda": v.numero_venda,
-                "valor": float(v.valor_final),
-                "tipo_pagamento": v.pagamentos[0].tipo_pagamento.value if v.pagamentos else "N/A",
-                "horario": v.criado_em.isoformat()
-            } for v in vendas
-        ]
-    }
-
-@router.get("/relatorios/z/{caixa_id}")
-async def relatorio_z(
-    caixa_id: int,
-    db: Session = Depends(get_db),
-    usuario_atual = Depends(obter_usuario_atual)
-):
-    """Relatório Z - Fechamento definitivo do caixa"""
-    
-    caixa = db.query(CaixaPDV).filter(CaixaPDV.id == caixa_id).first()
-    if not caixa:
-        raise HTTPException(status_code=404, detail="Caixa não encontrado")
-    
-    if caixa.usuario_operador_id != usuario_atual.id:
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    
-    if caixa.status != "fechado":
-        raise HTTPException(status_code=400, detail="Caixa deve estar fechado para relatório Z")
-    
-    relatorio_x_data = await relatorio_x(caixa_id, db, usuario_atual)
-    
-    relatorio_x_data.update({
-        "tipo": "relatorio_z",
-        "data_fechamento": caixa.data_fechamento.isoformat() if caixa.data_fechamento else None,
-        "valor_abertura": float(caixa.valor_abertura),
-        "valor_fechamento": float(caixa.valor_fechamento),
-        "diferenca": float(caixa.valor_fechamento - (caixa.valor_abertura + caixa.valor_vendas)),
-        "observacoes": caixa.observacoes
-    })
-    
-    return relatorio_x_data
-
-@router.websocket("/ws/{evento_id}")
-async def websocket_endpoint(websocket: WebSocket, evento_id: int):
-    from ..websocket import manager
-    await manager.connect(websocket, evento_id)
+    """
+    Cria um novo produto
+    
+    - **nome**: Nome do produto
+    - **descricao**: Descrição detalhada
+    - **preco**: Preço unitário
+    - **categoria**: Categoria do produto
+    - **codigo_barras**: Código de barras (opcional)
+    - **ativo**: Se o produto está ativo para venda
+    """
     try:
-        while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(json.dumps({"type": "ping", "message": "pong"}))
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, evento_id)
+        # Verificar permissões
+        if current_user.tipo not in [TipoUsuario.ADMIN, TipoUsuario.ORGANIZADOR]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas administradores e organizadores podem criar produtos"
+            )
+        
+        # Verificar se código de barras já existe
+        if produto_data.codigo_barras:
+            produto_existente = db.query(Produto).filter(
+                and_(
+                    Produto.codigo_barras == produto_data.codigo_barras,
+                    Produto.empresa_id == current_user.empresa_id
+                )
+            ).first()
+            
+            if produto_existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Código de barras já cadastrado"
+                )
+        
+        # Criar produto
+        db_produto = Produto(
+            nome=produto_data.nome,
+            descricao=produto_data.descricao,
+            preco=produto_data.preco,
+            categoria=produto_data.categoria,
+            codigo_barras=produto_data.codigo_barras,
+            ativo=produto_data.ativo,
+            empresa_id=current_user.empresa_id,
+            criado_por_id=current_user.id
+        )
+        
+        db.add(db_produto)
+        db.commit()
+        db.refresh(db_produto)
+        
+        # Log de auditoria
+        log_user_action(
+            db=db,
+            user=current_user,
+            action="CREATE_PRODUTO",
+            table_name="produtos",
+            record_id=db_produto.id,
+            new_data={
+                "nome": produto_data.nome,
+                "preco": float(produto_data.preco),
+                "categoria": produto_data.categoria
+            },
+            request=request,
+            details=f"Criação do produto {produto_data.nome}"
+        )
+        
+        logger.info(f"Produto criado por {current_user.email}: {produto_data.nome}")
+        
+        return ProdutoSchema.from_orm(db_produto)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao criar produto: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
 
-async def imprimir_comprovante(venda_id: int):
-    """Função para imprimir comprovante (background task)"""
-    pass
+@router.get("/produtos", response_model=PaginatedResponse, summary="Listar produtos")
+async def list_produtos(
+    page: int = Query(1, ge=1, description="Página"),
+    size: int = Query(20, ge=1, le=100, description="Itens por página"),
+    categoria: Optional[str] = Query(None, description="Filtrar por categoria"),
+    ativo: Optional[bool] = Query(None, description="Filtrar por status ativo"),
+    search: Optional[str] = Query(None, description="Buscar por nome ou código"),
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Lista produtos com filtros e paginação
+    """
+    try:
+        # Query base
+        query = db.query(Produto).filter(Produto.empresa_id == current_user.empresa_id)
+        
+        # Aplicar filtros
+        if categoria:
+            query = query.filter(Produto.categoria == categoria)
+        
+        if ativo is not None:
+            query = query.filter(Produto.ativo == ativo)
+        
+        if search:
+            query = query.filter(
+                or_(
+                    Produto.nome.ilike(f"%{search}%"),
+                    Produto.codigo_barras.ilike(f"%{search}%")
+                )
+            )
+        
+        # Ordenação
+        query = query.order_by(Produto.nome)
+        
+        # Contagem total
+        total = query.count()
+        
+        # Paginação
+        offset = (page - 1) * size
+        produtos = query.offset(offset).limit(size).all()
+        
+        # Calcular metadados da paginação
+        pages = (total + size - 1) // size
+        has_next = page < pages
+        has_prev = page > 1
+        
+        return PaginatedResponse(
+            items=[ProdutoSchema.from_orm(produto) for produto in produtos],
+            total=total,
+            page=page,
+            size=size,
+            pages=pages,
+            has_next=has_next,
+            has_prev=has_prev
+        )
+        
+    except Exception as e:
+        logger.error(f"Erro ao listar produtos: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+@router.get("/produtos/{produto_id}", response_model=ProdutoSchema, summary="Obter produto")
+async def get_produto(
+    produto_id: int,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtém detalhes de um produto específico
+    """
+    try:
+        produto = db.query(Produto).filter(
+            and_(
+                Produto.id == produto_id,
+                Produto.empresa_id == current_user.empresa_id
+            )
+        ).first()
+        
+        if not produto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Produto não encontrado"
+            )
+        
+        return ProdutoSchema.from_orm(produto)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao buscar produto {produto_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+@router.put("/produtos/{produto_id}", response_model=ProdutoSchema, summary="Atualizar produto")
+async def update_produto(
+    produto_id: int,
+    produto_data: ProdutoUpdate,
+    request: Request,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza um produto existente
+    """
+    try:
+        # Verificar permissões
+        if current_user.tipo not in [TipoUsuario.ADMIN, TipoUsuario.ORGANIZADOR]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas administradores e organizadores podem atualizar produtos"
+            )
+        
+        # Buscar produto
+        produto = db.query(Produto).filter(
+            and_(
+                Produto.id == produto_id,
+                Produto.empresa_id == current_user.empresa_id
+            )
+        ).first()
+        
+        if not produto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Produto não encontrado"
+            )
+        
+        # Dados originais para auditoria
+        old_data = {
+            "nome": produto.nome,
+            "preco": float(produto.preco),
+            "categoria": produto.categoria,
+            "ativo": produto.ativo
+        }
+        
+        # Atualizar campos
+        update_data = produto_data.dict(exclude_unset=True)
+        
+        # Verificar código de barras duplicado
+        if "codigo_barras" in update_data and update_data["codigo_barras"]:
+            produto_existente = db.query(Produto).filter(
+                and_(
+                    Produto.codigo_barras == update_data["codigo_barras"],
+                    Produto.empresa_id == current_user.empresa_id,
+                    Produto.id != produto_id
+                )
+            ).first()
+            
+            if produto_existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Código de barras já cadastrado"
+                )
+        
+        for field, value in update_data.items():
+            setattr(produto, field, value)
+        
+        produto.atualizado_em = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(produto)
+        
+        # Log de auditoria
+        log_user_action(
+            db=db,
+            user=current_user,
+            action="UPDATE_PRODUTO",
+            table_name="produtos",
+            record_id=produto.id,
+            old_data=old_data,
+            new_data=update_data,
+            request=request,
+            details=f"Atualização do produto {produto.nome}"
+        )
+        
+        logger.info(f"Produto atualizado por {current_user.email}: {produto.nome}")
+        
+        return ProdutoSchema.from_orm(produto)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao atualizar produto {produto_id}: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+# =============================================================================
+# ENDPOINTS DE ESTOQUE
+# =============================================================================
+
+@router.get("/estoque/evento/{evento_id}", response_model=List[EstoqueSchema], summary="Estoque por evento")
+async def get_estoque_evento(
+    evento_id: int,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtém estoque de produtos para um evento
+    """
+    try:
+        # Verificar acesso ao evento
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        if not evento:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evento não encontrado"
+            )
+        
+        if not verificar_acesso_evento(current_user, evento.empresa_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado a este evento"
+            )
+        
+        # Buscar estoque
+        estoque = db.query(EstoqueProduto).options(
+            joinedload(EstoqueProduto.produto)
+        ).filter(
+            EstoqueProduto.evento_id == evento_id
+        ).all()
+        
+        return [EstoqueSchema.from_orm(item) for item in estoque]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao buscar estoque do evento {evento_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+@router.post("/estoque/evento/{evento_id}/produto/{produto_id}", response_model=EstoqueSchema, summary="Adicionar ao estoque")
+async def add_produto_estoque(
+    evento_id: int,
+    produto_id: int,
+    quantidade: int = Query(..., ge=1, description="Quantidade a adicionar"),
+    request: Request,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Adiciona produto ao estoque de um evento
+    """
+    try:
+        # Verificar permissões
+        if current_user.tipo not in [TipoUsuario.ADMIN, TipoUsuario.ORGANIZADOR]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas administradores e organizadores podem gerenciar estoque"
+            )
+        
+        # Verificar evento e produto
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        produto = db.query(Produto).filter(
+            and_(
+                Produto.id == produto_id,
+                Produto.empresa_id == current_user.empresa_id
+            )
+        ).first()
+        
+        if not evento or not produto:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evento ou produto não encontrado"
+            )
+        
+        if not verificar_acesso_evento(current_user, evento.empresa_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado a este evento"
+            )
+        
+        # Buscar ou criar item de estoque
+        estoque = db.query(EstoqueProduto).filter(
+            and_(
+                EstoqueProduto.evento_id == evento_id,
+                EstoqueProduto.produto_id == produto_id
+            )
+        ).first()
+        
+        if estoque:
+            # Atualizar quantidade
+            quantidade_anterior = estoque.quantidade_disponivel
+            estoque.quantidade_disponivel += quantidade
+            estoque.atualizado_em = datetime.utcnow()
+        else:
+            # Criar novo item
+            quantidade_anterior = 0
+            estoque = EstoqueProduto(
+                evento_id=evento_id,
+                produto_id=produto_id,
+                quantidade_disponivel=quantidade
+            )
+            db.add(estoque)
+        
+        db.commit()
+        db.refresh(estoque)
+        
+        # Registrar movimentação
+        movimentacao = MovimentacaoEstoque(
+            estoque_id=estoque.id,
+            tipo=TipoMovimentacao.ENTRADA,
+            quantidade=quantidade,
+            motivo=f"Adição manual ao estoque",
+            usuario_id=current_user.id
+        )
+        db.add(movimentacao)
+        db.commit()
+        
+        # Log de auditoria
+        log_user_action(
+            db=db,
+            user=current_user,
+            action="ADD_ESTOQUE",
+            table_name="estoque_produtos",
+            record_id=estoque.id,
+            new_data={
+                "evento_id": evento_id,
+                "produto_id": produto_id,
+                "quantidade_anterior": quantidade_anterior,
+                "quantidade_adicionada": quantidade,
+                "quantidade_atual": estoque.quantidade_disponivel
+            },
+            request=request,
+            details=f"Adição de {quantidade} unidades do produto {produto.nome} ao estoque"
+        )
+        
+        logger.info(f"Estoque atualizado por {current_user.email}: +{quantidade} {produto.nome}")
+        
+        return EstoqueSchema.from_orm(estoque)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao adicionar produto ao estoque: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+# =============================================================================
+# ENDPOINTS DE VENDAS
+# =============================================================================
+
+@router.post("/vendas", response_model=VendaSchema, summary="Realizar venda")
+async def create_venda(
+    venda_data: VendaCreate,
+    request: Request,
+    current_user: Usuario = Depends(get_current_operador_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Realiza uma nova venda
+    
+    - **evento_id**: ID do evento
+    - **itens**: Lista de itens da venda
+    - **desconto**: Desconto aplicado (opcional)
+    - **observacoes**: Observações da venda (opcional)
+    """
+    try:
+        # Verificar evento
+        evento = db.query(Evento).filter(Evento.id == venda_data.evento_id).first()
+        if not evento:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evento não encontrado"
+            )
+        
+        if not verificar_acesso_evento(current_user, evento.empresa_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado a este evento"
+            )
+        
+        # Validar itens e calcular total
+        total_venda = Decimal('0.00')
+        itens_validados = []
+        
+        for item_data in venda_data.itens:
+            # Buscar produto
+            produto = db.query(Produto).filter(
+                and_(
+                    Produto.id == item_data.produto_id,
+                    Produto.empresa_id == current_user.empresa_id,
+                    Produto.ativo == True
+                )
+            ).first()
+            
+            if not produto:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Produto ID {item_data.produto_id} não encontrado ou inativo"
+                )
+            
+            # Verificar estoque
+            estoque = db.query(EstoqueProduto).filter(
+                and_(
+                    EstoqueProduto.evento_id == venda_data.evento_id,
+                    EstoqueProduto.produto_id == item_data.produto_id
+                )
+            ).first()
+            
+            if not estoque or estoque.quantidade_disponivel < item_data.quantidade:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Estoque insuficiente para o produto {produto.nome}"
+                )
+            
+            # Calcular valor do item
+            valor_unitario = produto.preco
+            valor_total_item = valor_unitario * item_data.quantidade
+            total_venda += valor_total_item
+            
+            itens_validados.append({
+                "produto": produto,
+                "estoque": estoque,
+                "quantidade": item_data.quantidade,
+                "valor_unitario": valor_unitario,
+                "valor_total": valor_total_item
+            })
+        
+        # Aplicar desconto
+        if venda_data.desconto:
+            total_venda -= venda_data.desconto
+            if total_venda < 0:
+                total_venda = Decimal('0.00')
+        
+        # Criar venda
+        db_venda = Venda(
+            evento_id=venda_data.evento_id,
+            usuario_id=current_user.id,
+            valor_total=total_venda,
+            desconto=venda_data.desconto or Decimal('0.00'),
+            status=StatusVenda.CONCLUIDA,
+            observacoes=venda_data.observacoes
+        )
+        
+        db.add(db_venda)
+        db.flush()  # Para obter o ID da venda
+        
+        # Criar itens da venda e atualizar estoque
+        for item_validado in itens_validados:
+            # Criar item da venda
+            item_venda = ItemVenda(
+                venda_id=db_venda.id,
+                produto_id=item_validado["produto"].id,
+                quantidade=item_validado["quantidade"],
+                valor_unitario=item_validado["valor_unitario"],
+                valor_total=item_validado["valor_total"]
+            )
+            db.add(item_venda)
+            
+            # Atualizar estoque
+            estoque = item_validado["estoque"]
+            estoque.quantidade_disponivel -= item_validado["quantidade"]
+            
+            # Registrar movimentação de estoque
+            movimentacao = MovimentacaoEstoque(
+                estoque_id=estoque.id,
+                tipo=TipoMovimentacao.SAIDA,
+                quantidade=item_validado["quantidade"],
+                motivo=f"Venda #{db_venda.id}",
+                usuario_id=current_user.id,
+                venda_id=db_venda.id
+            )
+            db.add(movimentacao)
+        
+        db.commit()
+        db.refresh(db_venda)
+        
+        # Notificar via WebSocket
+        await event_notifier.notify_new_sale(
+            evento_id=evento.id,
+            sale_data={
+                "id": db_venda.id,
+                "valor_total": float(db_venda.valor_total),
+                "itens_count": len(itens_validados),
+                "usuario": current_user.nome,
+                "timestamp": db_venda.criado_em.isoformat()
+            }
+        )
+        
+        # Log de auditoria
+        log_user_action(
+            db=db,
+            user=current_user,
+            action="CREATE_VENDA",
+            table_name="vendas",
+            record_id=db_venda.id,
+            new_data={
+                "evento_id": venda_data.evento_id,
+                "valor_total": float(total_venda),
+                "itens_count": len(itens_validados)
+            },
+            request=request,
+            details=f"Venda realizada no evento {evento.nome}"
+        )
+        
+        logger.info(f"Venda realizada por {current_user.email}: R$ {total_venda} no evento {evento.nome}")
+        
+        return VendaSchema.from_orm(db_venda)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao realizar venda: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+@router.get("/vendas/evento/{evento_id}", response_model=PaginatedResponse, summary="Vendas por evento")
+async def get_vendas_evento(
+    evento_id: int,
+    page: int = Query(1, ge=1, description="Página"),
+    size: int = Query(20, ge=1, le=100, description="Itens por página"),
+    data_inicio: Optional[date] = Query(None, description="Data início"),
+    data_fim: Optional[date] = Query(None, description="Data fim"),
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Lista vendas de um evento com filtros e paginação
+    """
+    try:
+        # Verificar evento
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        if not evento:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evento não encontrado"
+            )
+        
+        if not verificar_acesso_evento(current_user, evento.empresa_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado a este evento"
+            )
+        
+        # Query base
+        query = db.query(Venda).options(
+            joinedload(Venda.usuario),
+            joinedload(Venda.itens).joinedload(ItemVenda.produto)
+        ).filter(Venda.evento_id == evento_id)
+        
+        # Aplicar filtros de data
+        if data_inicio:
+            query = query.filter(func.date(Venda.criado_em) >= data_inicio)
+        
+        if data_fim:
+            query = query.filter(func.date(Venda.criado_em) <= data_fim)
+        
+        # Ordenação por data mais recente
+        query = query.order_by(desc(Venda.criado_em))
+        
+        # Contagem total
+        total = query.count()
+        
+        # Paginação
+        offset = (page - 1) * size
+        vendas = query.offset(offset).limit(size).all()
+        
+        # Calcular metadados da paginação
+        pages = (total + size - 1) // size
+        has_next = page < pages
+        has_prev = page > 1
+        
+        return PaginatedResponse(
+            items=[VendaSchema.from_orm(venda) for venda in vendas],
+            total=total,
+            page=page,
+            size=size,
+            pages=pages,
+            has_next=has_next,
+            has_prev=has_prev
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao listar vendas do evento {evento_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )
+
+# =============================================================================
+# DASHBOARD PDV
+# =============================================================================
+
+@router.get("/dashboard/evento/{evento_id}", summary="Dashboard PDV")
+async def get_dashboard_pdv(
+    evento_id: int,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Dashboard completo do PDV para um evento
+    """
+    try:
+        # Verificar evento
+        evento = db.query(Evento).filter(Evento.id == evento_id).first()
+        if not evento:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Evento não encontrado"
+            )
+        
+        if not verificar_acesso_evento(current_user, evento.empresa_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado a este evento"
+            )
+        
+        # Estatísticas de vendas
+        vendas_hoje = db.query(func.count(Venda.id), func.sum(Venda.valor_total)).filter(
+            and_(
+                Venda.evento_id == evento_id,
+                func.date(Venda.criado_em) == date.today()
+            )
+        ).first()
+        
+        total_vendas = db.query(func.count(Venda.id), func.sum(Venda.valor_total)).filter(
+            Venda.evento_id == evento_id
+        ).first()
+        
+        # Produtos mais vendidos
+        produtos_top = db.query(
+            Produto.nome,
+            func.sum(ItemVenda.quantidade).label('total_vendido'),
+            func.sum(ItemVenda.valor_total).label('receita')
+        ).join(ItemVenda).join(Venda).filter(
+            Venda.evento_id == evento_id
+        ).group_by(Produto.id, Produto.nome).order_by(
+            desc(func.sum(ItemVenda.quantidade))
+        ).limit(5).all()
+        
+        # Vendas por hora (hoje)
+        vendas_por_hora = db.query(
+            func.extract('hour', Venda.criado_em).label('hora'),
+            func.count(Venda.id).label('vendas'),
+            func.sum(Venda.valor_total).label('receita')
+        ).filter(
+            and_(
+                Venda.evento_id == evento_id,
+                func.date(Venda.criado_em) == date.today()
+            )
+        ).group_by(func.extract('hour', Venda.criado_em)).all()
+        
+        # Produtos com estoque baixo
+        estoque_baixo = db.query(EstoqueProduto).options(
+            joinedload(EstoqueProduto.produto)
+        ).filter(
+            and_(
+                EstoqueProduto.evento_id == evento_id,
+                EstoqueProduto.quantidade_disponivel <= 5
+            )
+        ).all()
+        
+        return {
+            "evento_id": evento_id,
+            "nome_evento": evento.nome,
+            "resumo_vendas": {
+                "vendas_hoje": vendas_hoje[0] or 0,
+                "receita_hoje": float(vendas_hoje[1] or 0),
+                "total_vendas": total_vendas[0] or 0,
+                "receita_total": float(total_vendas[1] or 0)
+            },
+            "produtos_top": [
+                {
+                    "nome": nome,
+                    "total_vendido": int(total_vendido),
+                    "receita": float(receita)
+                }
+                for nome, total_vendido, receita in produtos_top
+            ],
+            "vendas_por_hora": [
+                {
+                    "hora": int(hora),
+                    "vendas": int(vendas),
+                    "receita": float(receita)
+                }
+                for hora, vendas, receita in vendas_por_hora
+            ],
+            "estoque_baixo": [
+                {
+                    "produto_id": item.produto_id,
+                    "nome": item.produto.nome,
+                    "quantidade_disponivel": item.quantidade_disponivel
+                }
+                for item in estoque_baixo
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao gerar dashboard PDV do evento {evento_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro interno no servidor"
+        )

@@ -4,13 +4,16 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
+import { Alert, AlertDescription } from '../ui/alert';
 import { useToast } from '../../hooks/use-toast';
+import { useIsMobile } from '../../hooks/use-mobile';
 import { 
   Trophy, Crown, Medal, Star, TrendingUp, TrendingDown, 
-  Download, Filter, Award, Target,
-  Users, BarChart3, Gift, Flame
+  Download, Filter, Search, Award, Target, Zap,
+  Users, Calendar, BarChart3, Gift, Flame
 } from 'lucide-react';
 import { gamificacaoService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import ConquistasModal from './ConquistasModal';
 import MetricasModal from './MetricasModal';
 
@@ -43,10 +46,10 @@ interface DashboardGamificacao {
   estatisticas_gerais: any;
 }
 
-type BadgeLevel = 'lenda' | 'diamante' | 'platina' | 'ouro' | 'prata' | 'bronze';
-
 const RankingModule: React.FC = () => {
+  const { usuario } = useAuth();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   
   const [dashboard, setDashboard] = useState<DashboardGamificacao | null>(null);
   const [ranking, setRanking] = useState<RankingPromoter[]>([]);
@@ -60,8 +63,8 @@ const RankingModule: React.FC = () => {
     limit: 20
   });
   
-  const [conquistasModal, setConquistasModal] = useState<{ open: boolean; promoter: RankingPromoter | null }>({ open: false, promoter: null });
-  const [metricasModal, setMetricasModal] = useState<{ open: boolean; promoter: RankingPromoter | null }>({ open: false, promoter: null });
+  const [conquistasModal, setConquistasModal] = useState({ open: false, promoter: null });
+  const [metricasModal, setMetricasModal] = useState({ open: false, promoter: null });
 
   useEffect(() => {
     carregarDashboard();
@@ -126,7 +129,7 @@ const RankingModule: React.FC = () => {
   };
 
   const getBadgeIcon = (badge: string) => {
-    const icons: Record<BadgeLevel, React.ReactElement> = {
+    const icons = {
       'lenda': <Crown className="h-5 w-5 text-purple-600" />,
       'diamante': <Star className="h-5 w-5 text-blue-600" />,
       'platina': <Award className="h-5 w-5 text-gray-400" />,
@@ -134,11 +137,11 @@ const RankingModule: React.FC = () => {
       'prata': <Medal className="h-5 w-5 text-gray-500" />,
       'bronze': <Target className="h-5 w-5 text-orange-600" />
     };
-    return icons[badge as BadgeLevel] || <Target className="h-5 w-5 text-gray-400" />;
+    return icons[badge] || <Target className="h-5 w-5 text-gray-400" />;
   };
 
   const getBadgeColor = (badge: string) => {
-    const colors: Record<BadgeLevel, string> = {
+    const colors = {
       'lenda': 'bg-purple-100 text-purple-800 border-purple-200',
       'diamante': 'bg-blue-100 text-blue-800 border-blue-200',
       'platina': 'bg-gray-100 text-gray-800 border-gray-200',
@@ -146,7 +149,7 @@ const RankingModule: React.FC = () => {
       'prata': 'bg-gray-100 text-gray-600 border-gray-200',
       'bronze': 'bg-orange-100 text-orange-800 border-orange-200'
     };
-    return colors[badge as BadgeLevel] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return colors[badge] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   const formatCurrency = (value: number) => {

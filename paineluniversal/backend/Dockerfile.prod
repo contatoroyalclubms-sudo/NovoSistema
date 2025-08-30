@@ -1,0 +1,180 @@
+# ================================
+# ULTRA-PERFORMANCE PYTHON BACKEND
+# Multi-stage Docker build optimized for production
+# ================================
+
+# Stage 1: Build Dependencies
+FROM python:3.12-slim as python-builder
+
+# Set build arguments
+ARG BUILD_DATE
+ARG VERSION=3.0.0-ultra
+ARG VCS_REF
+
+# Add metadata
+LABEL maintainer="Sistema Universal Team" \
+      version="${VERSION}" \
+      build-date="${BUILD_DATE}" \
+      vcs-ref="${VCS_REF}" \
+      description="Ultra-performance FastAPI backend"
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    libpq-dev \
+    libssl-dev \
+    libffi-dev \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Upgrade pip and install build tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install Poetry with specific version for reproducibility
+RUN pip install --no-cache-dir poetry==1.7.1
+
+# Configure Poetry for production
+RUN poetry config virtualenvs.create true \
+    && poetry config virtualenvs.in-project true \
+    && poetry config cache-dir /tmp/poetry_cache
+
+WORKDIR /app
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock ./
+
+# Install dependencies with optimizations
+RUN poetry install --only=main --no-root --no-dev \
+    && rm -rf /tmp/poetry_cache
+
+# Stage 2: Runtime Dependencies
+FROM python:3.12-slim as runtime-base
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    redis-tools \
+    curl \
+    wget \
+    ca-certificates \
+    tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user with specific UID/GID for security
+RUN groupadd --gid 1000 appgroup \
+    && useradd --uid 1000 --gid appgroup --create-home --shell /bin/bash app
+
+# Stage 3: Application Build
+FROM runtime-base as app-builder
+
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=python-builder /app/.venv /app/.venv
+
+# Add virtual environment to PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy application code
+COPY --chown=app:appgroup . .
+
+# Remove unnecessary files for production
+RUN find . -name "*.pyc" -delete \
+    && find . -name "__pycache__" -type d -exec rm -rf {} + \
+    && find . -name "*.pytest_cache" -type d -exec rm -rf {} + \
+    && rm -rf tests/ .pytest_cache/ .coverage htmlcov/ \
+    && rm -f pytest.ini .coveragerc
+
+# Create necessary directories
+RUN mkdir -p logs uploads static backups \
+    && chmod 755 logs uploads static backups
+
+# Stage 4: Production Runtime
+FROM runtime-base as production
+
+# Security optimizations
+RUN echo 'app:!:18000:0:99999:7:::' >> /etc/shadow
+
+WORKDIR /app
+
+# Copy virtual environment and application
+COPY --from=app-builder /app/.venv /app/.venv
+COPY --from=app-builder /app /app
+
+# Set ownership
+RUN chown -R app:appgroup /app
+
+# Switch to non-root user
+USER app
+
+# Environment variables for production
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    ENVIRONMENT=production \
+    DEBUG=false \
+    WORKERS=4 \
+    MAX_WORKERS=8 \
+    PORT=8000
+
+# Expose port
+EXPOSE 8000
+
+# Health check with improved parameters
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Use tini as PID 1 for proper signal handling
+ENTRYPOINT ["tini", "--"]
+
+# Optimized startup command with gunicorn for production
+CMD ["python", "-m", "gunicorn", \
+     "app.main_ultra_optimized:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "$WORKERS", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--timeout", "30", \
+     "--keep-alive", "5", \
+     "--bind", "0.0.0.0:8000", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info"]
+
+# ================================
+# DEVELOPMENT STAGE
+# ================================
+FROM app-builder as development
+
+# Install development dependencies
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    vim \
+    less \
+    && rm -rf /var/lib/apt/lists/*
+
+USER app
+
+# Add development dependencies
+RUN /app/.venv/bin/pip install --no-cache-dir \
+    pytest \
+    pytest-asyncio \
+    pytest-cov \
+    black \
+    isort \
+    mypy \
+    pre-commit
+
+ENV DEBUG=true \
+    ENVIRONMENT=development
+
+# Development command with hot reload
+CMD ["python", "-m", "uvicorn", "app.main_ultra_optimized:app", \
+     "--host", "0.0.0.0", "--port", "8000", "--reload", \
+     "--log-level", "debug"]
