@@ -4,6 +4,9 @@ import React from "react"
 import { motion } from "framer-motion"
 import Header from "@/components/dashboard/Header"
 import MetricsGrid from "@/components/dashboard/MetricsGrid"
+import InteractiveCharts from "@/components/charts/InteractiveCharts"
+import { CustomersTable, ProductsTable } from "@/components/tables/SmartTable"
+import NotificationSystem from "@/components/notifications/NotificationSystem"
 
 export default function DashboardPage() {
   return (
@@ -26,6 +29,18 @@ export default function DashboardPage() {
         </motion.div>
 
         <MetricsGrid />
+
+        <InteractiveCharts />
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.2, duration: 0.6 }}
+          className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8"
+        >
+          <CustomersTable />
+          <ProductsTable />
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -117,6 +132,8 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       </main>
+      
+      <NotificationSystem />
     </div>
   )
 }
