@@ -5,11 +5,14 @@
   "scripts": {
     "install": "cd paineluniversal/frontend && npm install",
     "build": "cd paineluniversal/frontend && npm run build",
-    "start": "cd paineluniversal/frontend && npm run start",
+    "start": "cd paineluniversal/frontend && npx serve -s dist -p ${PORT:-3000}",
     "dev": "cd paineluniversal/frontend && npm run dev"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "serve": "^14.2.0"
   }
 }
